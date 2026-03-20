@@ -2,10 +2,13 @@ import os
 import tarfile
 import zipfile
 import numpy as np
-from scipy.sparse import csr_matrix, save_npz, load_npz
+from scipy.sparse import csr_matrix, save_npz, load_npz, issparse
 import json
+import faiss
+import time
 
-from utils import (download_file, load_fvecs, load_vecs_from_txt, load_vectors_from_u8bin, load_metadata)
+from utils import (download_file, load_fvecs, load_vecs_from_txt, load_vectors_from_u8bin, load_metadata,
+                   plot_selectivity, plot_tag_popularity)
 
 BASE_DIRECTORY = 'datasets'
 
@@ -15,6 +18,7 @@ class Dataset:
         self.subset_size = subset_size
         self.neighbors_retrieved = neighbors_retrieved
         self.dataset_path = os.path.join(BASE_DIRECTORY, name)
+        self.rng = np.random.default_rng(seed=42)
 
         os.makedirs(self.dataset_path, exist_ok=True)
 
@@ -101,13 +105,39 @@ class Dataset:
         if subset_path is None:
             raise RuntimeError("Subset has not been created yet")
         return subset_path
-    
+
+    def inspect_data(self, vecs, attrs, q_vecs, q_filters):
+        print(f"\n{'='*10} {self.name} Dataset {'='*10}")
+        data_map = {
+            "Base Vectors": vecs,
+            "Base Attributes": attrs,
+            "Query Vectors": q_vecs,
+            "Query Filters": q_filters
+        }
+        
+        for label, arr in data_map.items():
+            if arr is not None:
+                if issparse(arr):
+                    # For CSR/Sparse: sum of data, indices, and indptr arrays
+                    bytes_used = arr.data.nbytes + arr.indices.nbytes + arr.indptr.nbytes
+                    dtype_str = f"sparse({arr.dtype})"
+                    shape_str = str(arr.shape)
+                else:
+                    bytes_used = arr.nbytes
+                    dtype_str = str(arr.dtype)
+                    shape_str = str(arr.shape)
+
+                mb = bytes_used / (1024**2)
+                print(f"{label:16} | Shape: {shape_str:18} | Dtype: {dtype_str:12} | Size: {mb:7.2f} MB")
+            else:
+                print(f"{label:16} | NOT LOADED")
+
+
 class siftDataset(Dataset):
     def __init__(self, subset_size=1.0, neighbors_retrieved=10):
         super().__init__("SIFT", subset_size, neighbors_retrieved)
         self.url = 'ftp://ftp.irisa.fr/local/texmex/corpus/sift.tar.gz'
         
-        self.rng = np.random.default_rng(seed=42)
         # for the synthetic data:
         self.number_of_attributes = 3
         self.value_cardinality = 4
@@ -164,7 +194,7 @@ class siftDataset(Dataset):
         base_attributes = self.create_synthetic(size=base_vecs.shape[0], n_max=self.value_cardinality, number_of_attributes=self.number_of_attributes)
         np.save(os.path.join(self.dataset_path, 'base', 'attributes.npy'), base_attributes)
 
-        for i in range(self.number_of_attributes):
+        for i in range(1, self.number_of_attributes+1):
             query_filter = self.create_filters(size=query_vecs.shape[0], n_max=self.value_cardinality, number_of_attributes=self.number_of_attributes, number_of_restrictions=i)
             os.makedirs(os.path.join(self.dataset_path, 'queries', 'restriction_'+str(i)), exist_ok=True)
             np.save(os.path.join(self.dataset_path, 'queries', 'restriction_'+str(i), 'filters.npy'), query_filter)
@@ -184,37 +214,124 @@ class siftDataset(Dataset):
         base_size = int(base_vecs.shape[0] * self.subset_size)
         query_size = int(query_vecs.shape[0] * self.subset_size)
 
-        base_ids = np.arange(base_size)
-        query_ids = np.arange(query_size)
+        base_ids = self.rng.choice(np.arange(base_vecs.shape[0]), size=base_size, replace=False)
+        base_ids.sort()
+        query_ids = self.rng.choice(np.arange(query_vecs.shape[0]), size=query_size, replace=False)
+        query_ids.sort()
 
         os.makedirs(os.path.join(subset_path, 'base'), exist_ok=True)
         os.makedirs(os.path.join(subset_path, 'queries'), exist_ok=True)
         np.save(os.path.join(subset_path, 'base', 'ids.npy'), base_ids)
         np.save(os.path.join(subset_path, 'queries', 'ids.npy'), query_ids)
 
-        # ground truth not implemented yet
-        """
-        for i in range(self.number_of_attributes):
-            filter = np.load(os.path.join(self.dataset_path, 'queries', 'restriction_'+str(i), 'filter.npy))
-            gt_ids = self.calculate_ground_truth(base_vecs[base_ids], base_attributes[base_ids], query_vecs[query_ids], filter[query_ids])
-            np.save(os.path.join(subset_path, 'queries', 'restriction_'+str(i), 'ids.npy'), gt_ids)
-
-        """
-
         metadata = {
             "subset_size": self.subset_size,
-            "neighbors_retrieved": self.neighbors_retrieved
+            "neighbors_retrieved": self.neighbors_retrieved,
+            "vector_dim": base_vecs.shape[1],
+            "vector_dtype": str(base_vecs.dtype),
+            "base_count": len(base_ids),
+            "query_count": len(query_ids)
         }
 
         with open(os.path.join(subset_path, 'metadata.json'), 'w') as f:
             json.dump(metadata, f)
+
+        base_vecs = self.get_base_vectors()
+        base_attributes = self.get_base_attributes()
+        query_vecs = self.get_query_vectors()
+        
+        for i in range(1, self.number_of_attributes+1):
+            query_filters = self.get_query_filters(i)
+            gt_ids, gt_dst = self.calculate_ground_truth(base_vecs, base_attributes, query_vecs, query_filters)
+            os.makedirs(os.path.join(subset_path, 'queries', 'restriction_'+str(i)), exist_ok=True)
+            np.save(os.path.join(subset_path, 'queries', 'restriction_'+str(i), 'ground_truth_ids.npy'), gt_ids)
+            np.save(os.path.join(subset_path, 'queries', 'restriction_'+str(i), 'distances.npy'), gt_dst)
         
         return
 
-    # not implemented yet    
-    def calculate_ground_truth(self, base_vecs, base_attributes, query_vecs, filter):
-        ground_truth_ids = None
-        return ground_truth_ids
+    def calculate_ground_truth(self, base_vecs, base_attributes, query_vecs, query_filters):
+        """
+        Computes exact k-NN ground truth for filtered queries using FAISS.
+        """
+        k = self.neighbors_retrieved
+        num_queries = query_vecs.shape[0]
+        
+        gt_ids = np.full((num_queries, k), -1, dtype=np.int64)
+        gt_dst = np.full((num_queries, k), np.inf, dtype=np.float32)
+
+        d = base_vecs.shape[1]
+        index = faiss.IndexFlatL2(d)
+        index.add(base_vecs)
+
+        print(f"Calculating ground truth for {num_queries} queries...")
+        start_time = time.time()
+
+        for i in range(num_queries):
+            q_vec = query_vecs[i:i+1]
+            q_filt = query_filters[i]
+
+            mask = np.all((base_attributes == q_filt) | (q_filt == -1), axis=1)
+            
+            valid_ids = np.where(mask)[0].astype('int32')
+
+            if len(valid_ids) == 0:
+                print("no valid ids")
+                continue
+                
+            actual_k = min(k, len(valid_ids))
+
+            selector = faiss.IDSelectorBatch(valid_ids)
+            params = faiss.SearchParameters(sel=selector)
+            
+            distances, indices = index.search(q_vec, k, params=params)
+            
+            gt_ids[i, :actual_k] = indices[0, :actual_k]
+            gt_dst[i, :actual_k] = distances[0, :actual_k]
+
+            if (i + 1) % 1000 == 0:
+                print(f"  Processed {i + 1}/{num_queries} queries...")
+
+        end_time = time.time()
+        print(f"Ground truth calculation finished in {end_time - start_time:.2f} seconds.")
+
+        return gt_ids, gt_dst
+    
+    def calculate_selectivity(self, number_of_restrictions):
+        base_attributes = self.get_base_attributes()
+        query_filters = self.get_query_filters(number_of_restrictions)
+        counts = []
+        for i in range(query_filters.shape[0]):
+            q_filt = query_filters[i]
+
+            mask = np.all((base_attributes == q_filt) | (q_filt == -1), axis=1)
+            
+            valid_ids = np.where(mask)[0].astype('int32')
+            counts.append(len(valid_ids))
+        
+        counts = np.array(counts)
+        subset_path = self.get_subset_path_or_fail()
+        os.makedirs(os.path.join(subset_path, 'analysis', 'restriction_'+str(number_of_restrictions)), exist_ok=True)
+        np.save(os.path.join(subset_path, 'analysis', 'restriction_'+str(number_of_restrictions), 'selectivity.npy'), counts)
+        
+        return counts
+    
+    def plot_selectivity(self, number_of_restrictions, relative_counts=False):
+        subset_path = self.get_subset_path_or_fail()
+        counts = np.load(os.path.join(subset_path, 'analysis', 'restriction_'+str(number_of_restrictions), 'selectivity.npy'))
+
+        base_count = None
+        if relative_counts:
+            metadata_path = os.path.join(subset_path, 'metadata.json')
+                
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+                base_count = metadata.get("base_count")                
+        dst_path = os.path.join(subset_path, 'analysis', 'restriction_'+str(number_of_restrictions))
+        param_dict = {
+            "number_of_restrictions": str(number_of_restrictions)
+        }
+        plot_selectivity(counts, self.name, dst_path, relative_counts, base_count, param_dict)
+        return
     
     def get_base_vectors(self):
         subset_path = self.get_subset_path_or_fail()
@@ -246,12 +363,12 @@ class siftDataset(Dataset):
     
     def get_ground_truth_ids(self, number_of_restrictions):
         subset_path = self.get_subset_path_or_fail()
-        gt_ids = np.load(os.path.join(subset_path, 'queries', 'restriction_'+str(number_of_restrictions), 'ground_truth_ids'))
+        gt_ids = np.load(os.path.join(subset_path, 'queries', 'restriction_'+str(number_of_restrictions), 'ground_truth_ids.npy'))
         
         return gt_ids
 
     def create_synthetic(self, size, n_max, number_of_attributes):
-        return self.rng.integers(0, n_max, size=(size, number_of_attributes))
+        return self.rng.integers(0, n_max, size=(size, number_of_attributes), dtype='int32')
     
     def create_filters(self, size, n_max, number_of_attributes, number_of_restrictions):
         filters = np.full((size, number_of_attributes), -1, dtype=np.int32)
@@ -267,7 +384,6 @@ class GloVeDataset(Dataset):
         self.url = f"https://nlp.stanford.edu/data/glove.6B.zip"
         self.base_ratio = 0.99
 
-        self.rng = np.random.default_rng(seed=42)
         # for the synthetic data:
         self.number_of_attributes = 3
         self.value_cardinality = 4
@@ -351,25 +467,119 @@ class GloVeDataset(Dataset):
         base_size = int(base_vecs.shape[0] * self.subset_size)
         query_size = int(query_vecs.shape[0] * self.subset_size)
 
-        base_ids = np.arange(base_size)
-        query_ids = np.arange(query_size)
+        base_ids = self.rng.choice(np.arange(base_vecs.shape[0]), size=base_size, replace=False)
+        base_ids.sort()
+        query_ids = self.rng.choice(np.arange(query_vecs.shape[0]), size=query_size, replace=False)
+        query_ids.sort()
 
         os.makedirs(os.path.join(subset_path, 'base'), exist_ok=True)
         os.makedirs(os.path.join(subset_path, 'queries'), exist_ok=True)
         np.save(os.path.join(subset_path, 'base', 'ids.npy'), base_ids)
         np.save(os.path.join(subset_path, 'queries', 'ids.npy'), query_ids)
 
-        # ground truth not implemented yet
-
         metadata = {
             "subset_size": self.subset_size,
-            "neighbors_retrieved": self.neighbors_retrieved
+            "neighbors_retrieved": self.neighbors_retrieved,
+            "vector_dim": base_vecs.shape[1],
+            "vector_dtype": str(base_vecs.dtype),
+            "base_count": len(base_ids),
+            "query_count": len(query_ids)
         }
 
         with open(os.path.join(subset_path, 'metadata.json'), 'w') as f:
             json.dump(metadata, f)
         
+        base_vecs = self.get_base_vectors()
+        base_attributes = self.get_base_attributes()
+        query_vecs = self.get_query_vectors()
+        query_filters = self.get_query_filters()
+
+        gt_ids, gt_dst = self.calculate_ground_truth(base_vecs, base_attributes, query_vecs, query_filters)
+        np.save(os.path.join(subset_path, 'queries', 'ground_truth_ids.npy'), gt_ids)
+        np.save(os.path.join(subset_path, 'queries', 'distances.npy'), gt_dst)
+
         return
+
+    def calculate_ground_truth(self, base_vecs, base_attributes, query_vecs, query_filters):
+        
+        k = self.neighbors_retrieved
+        num_queries = query_vecs.shape[0]
+        
+        gt_ids = np.full((num_queries, k), -1, dtype=np.int64)
+        gt_dst = np.full((num_queries, k), np.inf, dtype=np.float32)
+
+        index = faiss.IndexFlatL2(base_vecs.shape[1])
+        index.add(base_vecs)
+
+        print(f"Calculating GloVe ground truth for {num_queries} queries...")
+
+        for i in range(num_queries):
+            q_vec = query_vecs[i:i+1]
+            q_filt = query_filters[i]
+            
+            combined_mask = np.ones(base_attributes.shape[0], dtype=bool)
+
+            for attr_idx in range(self.number_of_attributes):
+                attr_mask = np.isin(base_attributes[:, attr_idx], q_filt[attr_idx])
+                
+                combined_mask &= attr_mask
+            
+            valid_ids = np.where(combined_mask)[0].astype('int64')
+
+            if len(valid_ids) == 0:
+                continue
+
+            selector = faiss.IDSelectorBatch(valid_ids)
+            params = faiss.SearchParameters(sel=selector)
+            
+            distances, indices = index.search(q_vec, k, params=params)
+            
+            actual_k = min(k, len(valid_ids))
+            gt_ids[i, :actual_k] = indices[0, :actual_k]
+            gt_dst[i, :actual_k] = distances[0, :actual_k]
+
+        return gt_ids, gt_dst
+    
+    def calculate_selectivity(self):
+        base_attributes = self.get_base_attributes()
+        query_filters = self.get_query_filters()
+        counts = []
+        for i in range(query_filters.shape[0]):
+            q_filt = query_filters[i]
+            
+            combined_mask = np.ones(base_attributes.shape[0], dtype=bool)
+
+            for attr_idx in range(self.number_of_attributes):
+                attr_mask = np.isin(base_attributes[:, attr_idx], q_filt[attr_idx])
+                
+                combined_mask &= attr_mask
+            
+            valid_ids = np.where(combined_mask)[0].astype('int64')
+            counts.append(len(valid_ids))
+        
+        counts = np.array(counts)
+        subset_path = self.get_subset_path_or_fail()
+        os.makedirs(os.path.join(subset_path, 'analysis'), exist_ok=True)
+        np.save(os.path.join(subset_path, 'analysis', 'selectivity.npy'), counts)
+        
+        return counts
+    
+    def plot_selectivity(self, relative_counts=False):
+        subset_path = self.get_subset_path_or_fail()
+        counts = np.load(os.path.join(subset_path, 'analysis', 'selectivity.npy'))
+
+        base_count = None
+        if relative_counts:
+            metadata_path = os.path.join(subset_path, 'metadata.json')
+                
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+                base_count = metadata.get("base_count")
+        dst_path = os.path.join(subset_path, 'analysis')
+        param_dict = None
+        plot_selectivity(counts, self.name, dst_path, relative_counts, base_count, param_dict)
+        return
+    
 
     def get_base_vectors(self):
         subset_path = self.get_subset_path_or_fail()
@@ -401,21 +611,25 @@ class GloVeDataset(Dataset):
     
     def get_ground_truth_ids(self, query_type=None):
         subset_path = self.get_subset_path_or_fail()
-        gt_ids = np.load(os.path.join(subset_path, 'queries', 'ground_truth_ids'))
+        gt_ids = np.load(os.path.join(subset_path, 'queries', 'ground_truth_ids.npy'))
         
         return gt_ids
 
     def create_synthetic(self, size, n_max, number_of_attributes):
-        return self.rng.integers(0, n_max, size=(size, number_of_attributes))
+        return self.rng.integers(0, n_max, size=(size, number_of_attributes), dtype='int32')
     
     def create_filters(self, size, n_max, num_attributes, values_per_attr):
-        return self.rng.integers(
-            0,
-            n_max,
-            size=(size, num_attributes, values_per_attr),
-            dtype=np.int32
-        )
-    
+        filters = np.empty((size, num_attributes, values_per_attr), dtype=np.int32)
+        
+        for q_idx in range(size):
+            for attr_idx in range(num_attributes):
+                filters[q_idx, attr_idx] = self.rng.choice(
+                    n_max, 
+                    size=values_per_attr, 
+                    replace=False
+                )
+                
+        return filters
     
     
 class yfccDataset(Dataset):
@@ -472,30 +686,159 @@ class yfccDataset(Dataset):
         os.makedirs(subset_path, exist_ok=True)
 
         base_vecs = np.load(os.path.join(self.dataset_path, 'base', 'vectors.npy'))
-        base_attributes = load_npz(os.path.join(self.dataset_path, 'base', 'attributes.npz'))
         query_vecs = np.load(os.path.join(self.dataset_path, 'queries', 'vectors.npy'))
 
         base_size = int(base_vecs.shape[0] * self.subset_size)
         query_size = int(query_vecs.shape[0] * self.subset_size)
 
-        base_ids = np.arange(base_size)
-        query_ids = np.arange(query_size)
+        base_ids = self.rng.choice(np.arange(base_vecs.shape[0]), size=base_size, replace=False)
+        base_ids.sort()
+        query_ids = self.rng.choice(np.arange(query_vecs.shape[0]), size=query_size, replace=False)
+        query_ids.sort()
 
         os.makedirs(os.path.join(subset_path, 'base'), exist_ok=True)
         os.makedirs(os.path.join(subset_path, 'queries'), exist_ok=True)
         np.save(os.path.join(subset_path, 'base', 'ids.npy'), base_ids)
         np.save(os.path.join(subset_path, 'queries', 'ids.npy'), query_ids)
 
-        # ground truth not implemented yet
-
         metadata = {
             "subset_size": self.subset_size,
             "neighbors_retrieved": self.neighbors_retrieved
         }
-
         with open(os.path.join(subset_path, 'metadata.json'), 'w') as f:
             json.dump(metadata, f)
         
+        counts = self.calculate_selectivity()
+        valid_query_indices = np.where(counts >= self.neighbors_retrieved)[0]
+        query_ids = query_ids[valid_query_indices]
+        np.save(os.path.join(subset_path, 'queries', 'ids.npy'), query_ids)
+
+        metadata = {
+            "subset_size": self.subset_size,
+            "neighbors_retrieved": self.neighbors_retrieved,
+            "vector_dim": base_vecs.shape[1],
+            "vector_dtype": str(base_vecs.dtype),
+            "base_count": len(base_ids),
+            "query_count": len(query_ids)
+        }
+        with open(os.path.join(subset_path, 'metadata.json'), 'w') as f:
+            json.dump(metadata, f)
+
+        base_vecs = self.get_base_vectors()
+        base_attributes = self.get_base_attributes()
+        query_vecs = self.get_query_vectors()
+        query_filters = self.get_query_filters()
+
+        gt_ids, gt_dst = self.calculate_ground_truth(base_vecs, base_attributes, query_vecs, query_filters)
+        np.save(os.path.join(subset_path, 'queries', 'ground_truth_ids.npy'), gt_ids)
+        np.save(os.path.join(subset_path, 'queries', 'distances.npy'), gt_dst)
+
+        return
+    
+    def calculate_ground_truth(self, base_vecs, base_attributes, query_vecs, query_filters):
+        print("calculating ground truth")
+        k = self.neighbors_retrieved
+        num_queries = query_vecs.shape[0]
+        
+        gt_ids = np.full((num_queries, k), -1, dtype=np.int64)
+        gt_dst = np.full((num_queries, k), np.inf, dtype=np.float32)
+
+        d = base_vecs.shape[1]
+        index = faiss.IndexFlatL2(d)
+        index.add(base_vecs)
+        
+        docs_per_word = base_attributes.T.tocsr()
+
+        for q in range(num_queries):
+            q_tags = query_filters[q].indices
+            
+            if len(q_tags) == 0:
+                continue
+
+            valid_ids = docs_per_word[q_tags[0]].indices
+            for tag in q_tags[1:]:
+                valid_ids = np.intersect1d(valid_ids, docs_per_word[tag].indices)
+
+            if len(valid_ids) == 0:
+                print("no valid ids")
+                continue
+
+            selector = faiss.IDSelectorBatch(valid_ids.astype('int64'))
+            params = faiss.SearchParameters(sel=selector)
+            
+            distances, indices = index.search(query_vecs[q:q+1], k, params=params)
+            
+            actual_k = min(k, len(valid_ids))
+            gt_ids[q, :actual_k] = indices[0, :actual_k]
+            gt_dst[q, :actual_k] = distances[0, :actual_k]
+
+        return gt_ids, gt_dst
+    
+    def calculate_selectivity(self):
+        base_attributes = self.get_base_attributes()
+        query_filters = self.get_query_filters()
+        counts = []
+        docs_per_word = base_attributes.T.tocsr()
+        for q in range(query_filters.shape[0]):
+            q_tags = query_filters[q].indices
+            
+            if len(q_tags) == 0:
+                continue
+
+            valid_ids = docs_per_word[q_tags[0]].indices
+            for tag in q_tags[1:]:
+                valid_ids = np.intersect1d(valid_ids, docs_per_word[tag].indices)
+            
+            counts.append(len(valid_ids))
+        
+        counts = np.array(counts)
+        subset_path = self.get_subset_path_or_fail()
+        os.makedirs(os.path.join(subset_path, 'analysis'), exist_ok=True)
+        np.save(os.path.join(subset_path, 'analysis', 'selectivity.npy'), counts)
+        
+        return counts
+    
+    def plot_selectivity(self, relative_counts=False):
+        subset_path = self.get_subset_path_or_fail()
+        counts = np.load(os.path.join(subset_path, 'analysis', 'selectivity.npy'))
+
+        base_count = None
+        if relative_counts:
+            metadata_path = os.path.join(subset_path, 'metadata.json')
+                
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+                base_count = metadata.get("base_count")
+        dst_path = os.path.join(subset_path, 'analysis')
+        param_dict = None
+        plot_selectivity(counts, self.name, dst_path, relative_counts, base_count, param_dict)
+        return
+    
+    def calculate_tag_counts(self):
+        base_attributes = self.get_base_attributes()
+        docs_per_word = base_attributes.T.tocsr()
+        tag_counts = np.diff(docs_per_word.indptr)
+
+        subset_path = self.get_subset_path_or_fail()
+        os.makedirs(os.path.join(subset_path, 'analysis'), exist_ok=True)
+        np.save(os.path.join(subset_path, 'analysis', 'tag_counts.npy'), tag_counts)
+
+        return tag_counts
+    
+    def plot_tag_popularity(self, relative_counts=False):
+        subset_path = self.get_subset_path_or_fail()
+        tag_counts = np.load(os.path.join(subset_path, 'analysis', 'tag_counts.npy'))
+
+        base_count = None
+        if relative_counts:
+            metadata_path = os.path.join(subset_path, 'metadata.json')
+                
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+                base_count = metadata.get("base_count")
+        dst_path = os.path.join(subset_path, 'analysis')
+        param_dict = None
+        plot_tag_popularity(tag_counts, self.name, dst_path, relative_counts, base_count, param_dict)
         return
 
     def get_base_vectors(self):
@@ -503,7 +846,7 @@ class yfccDataset(Dataset):
         base_vecs = np.load(os.path.join(self.dataset_path, 'base', 'vectors.npy'))
         base_ids = np.load(os.path.join(subset_path, 'base', 'ids.npy'))
         
-        return base_vecs[base_ids]
+        return base_vecs[base_ids].astype('float32')
     
     def get_base_attributes(self):
         subset_path = self.get_subset_path_or_fail()
@@ -517,7 +860,7 @@ class yfccDataset(Dataset):
         query_vecs = np.load(os.path.join(self.dataset_path, 'queries', 'vectors.npy'))
         query_ids = np.load(os.path.join(subset_path, 'queries', 'ids.npy'))
 
-        return query_vecs[query_ids]
+        return query_vecs[query_ids].astype('float32')
     
     def get_query_filters(self, query_type=None):
         subset_path = self.get_subset_path_or_fail()
@@ -528,62 +871,7 @@ class yfccDataset(Dataset):
     
     def get_ground_truth_ids(self, query_type=None):
         subset_path = self.get_subset_path_or_fail()
-        gt_ids = np.load(os.path.join(subset_path, 'queries', 'ground_truth_ids'))
+        gt_ids = np.load(os.path.join(subset_path, 'queries', 'ground_truth_ids.npy'))
         
         return gt_ids
 
-    
-    
-if __name__ == '__main__':
-    """
-    dataset = siftDataset()
-    dataset.prepare()
-    restr_count = 2
-    base_vecs = dataset.get_base_vectors()
-    base_attributes = dataset.get_base_attributes()
-    query_vecs = dataset.get_query_vectors()
-    query_filters = dataset.get_query_filters(restr_count)
-    
-    print("base_vecs-shape: ", base_vecs.shape)
-    print("base_attrs-shape: ", base_attributes.shape)
-    print("query_vecs-shape: ", query_vecs.shape)
-    print("query_filters-shape: ", query_filters.shape)
-    
-    """
-    
-
-    
-    dataset = GloVeDataset(subset_size=0.8)
-    dataset.prepare()
-    base_vecs = dataset.get_base_vectors()
-    base_attributes = dataset.get_base_attributes()
-    query_vecs = dataset.get_query_vectors()
-    query_filters = dataset.get_query_filters()
-    
-    print("base_vecs-shape: ", base_vecs.shape)
-    print("base_attrs-shape: ", base_attributes.shape)
-    print("query_vecs-shape: ", query_vecs.shape)
-    print("query_filters-shape: ", query_filters.shape)
-    
-    
-    
-    
-
-    """
-    dataset = yfccDataset()
-    dataset.prepare()
-    base_vecs = dataset.get_base_vectors()
-    base_attributes = dataset.get_base_attributes()
-    query_vecs = dataset.get_query_vectors()
-    query_filters = dataset.get_query_filters()
-    
-    print("base_vecs-shape: ", base_vecs.shape)
-    print("base_attrs-shape: ", base_attributes.shape)
-    print("query_vecs-shape: ", query_vecs.shape)
-    print("query_filters-shape: ", query_filters.shape)
-    
-    """
-    
-    
-    
-    
