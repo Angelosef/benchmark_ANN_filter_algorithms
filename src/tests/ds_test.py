@@ -1,10 +1,13 @@
-import datasets
+from src.datasets.sift import siftDataset
+from src.datasets.glove import GloVeDataset
+from src.datasets.yfcc import yfccDataset
+
 import numpy as np
 
 if __name__ == '__main__':
     
     # --- SIFT ---
-    dataset = datasets.siftDataset(subset_size=0.1)
+    dataset = siftDataset(subset_size=0.1)
     dataset.prepare()
     restr_count = 2
     
@@ -24,7 +27,7 @@ if __name__ == '__main__':
 
 
     # --- GloVe ---
-    dataset = datasets.GloVeDataset(subset_size=0.1)
+    dataset = GloVeDataset(subset_size=0.1)
     dataset.prepare()
     dataset.inspect_data(
         dataset.get_base_vectors(), 
@@ -41,7 +44,7 @@ if __name__ == '__main__':
 
     
     # --- YFCC ---
-    dataset = datasets.yfccDataset(subset_size=0.1)
+    dataset = yfccDataset(subset_size=0.1)
     dataset.prepare()
     
     dataset.inspect_data(
