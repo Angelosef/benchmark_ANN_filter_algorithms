@@ -1,0 +1,11 @@
+# Clean or create a new build directory to avoid conflicts
+cmake -DFAISS_ENABLE_GPU=OFF \
+      -DFAISS_ENABLE_PYTHON=OFF \
+      -DBUILD_TESTING=OFF \
+      -DBUILD_SHARED_LIBS=OFF \
+      -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+      -DCMAKE_BUILD_TYPE=Release \
+      -B build_static
+
+# Build only the faiss library
+make -C build_static -j faiss
