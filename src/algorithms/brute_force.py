@@ -24,7 +24,7 @@ def build_structured(self, vectors, attributes, parameters):
     ids = np.arange(len(vectors)).astype('int64')
     self.index.add_with_ids(self.base_vectors, ids)
 
-@BruteForceIdFilter.register_build("sparse-")
+@BruteForceIdFilter.register_build("sparse")
 def build_sparse(self, vectors, attributes, parameters):
     self.base_vectors = vectors
     self.base_attributes_csc = attributes.tocsc()
@@ -73,7 +73,7 @@ def query_structured_CNF(self, vectors, filters, k, parameters):
 
     return D, I
 
-@BruteForceIdFilter.register_query("sparse-", "conjunction-")
+@BruteForceIdFilter.register_query("sparse", "conjunction")
 def query_sparse_conjunction(self, vectors, filters, k, parameters):
     D = np.full((len(vectors), k), np.inf, dtype='float32')
     I = np.full((len(vectors), k), -1, dtype='int64')
@@ -146,7 +146,7 @@ def query_structured_boolean(self, vectors, filters_list, k, parameters):
 
     return D, I
 
-@BruteForceIdFilter.register_build("sparse")
+@BruteForceIdFilter.register_build("sparse-")
 def build_sparse_translator(self, vectors, attributes, parameters):
     print("using sparse build translator")
     m = 4000
@@ -166,7 +166,7 @@ def build_sparse_translator(self, vectors, attributes, parameters):
     
     return build_structured_boolean(self, vectors, encoded_attrs, parameters)
 
-@BruteForceIdFilter.register_query("sparse", "conjunction")
+@BruteForceIdFilter.register_query("sparse-", "conjunction-")
 def query_sparse_conjunction_translator(self, vectors, filters, k, parameters):
     print("using sparse query translator")
     nq = vectors.shape[0]

@@ -132,46 +132,6 @@ class GloVeDataset(Dataset):
         np.save(os.path.join(subset_path, 'queries', 'distances.npy'), gt_dst)
 
         return
-
-    def calculate_ground_truth(self, base_vecs, base_attributes, query_vecs, query_filters):
-        
-        k = self.neighbors_retrieved
-        num_queries = query_vecs.shape[0]
-        
-        gt_ids = np.full((num_queries, k), -1, dtype=np.int64)
-        gt_dst = np.full((num_queries, k), np.inf, dtype=np.float32)
-
-        index = faiss.IndexFlatL2(base_vecs.shape[1])
-        index.add(base_vecs)
-
-        print(f"Calculating GloVe ground truth for {num_queries} queries...")
-
-        for i in range(num_queries):
-            q_vec = query_vecs[i:i+1]
-            q_filt = query_filters[i]
-            
-            combined_mask = np.ones(base_attributes.shape[0], dtype=bool)
-
-            for attr_idx in range(self.number_of_attributes):
-                attr_mask = np.isin(base_attributes[:, attr_idx], q_filt[attr_idx])
-                
-                combined_mask &= attr_mask
-            
-            valid_ids = np.where(combined_mask)[0].astype('int64')
-
-            if len(valid_ids) == 0:
-                continue
-
-            selector = faiss.IDSelectorBatch(valid_ids)
-            params = faiss.SearchParameters(sel=selector)
-            
-            distances, indices = index.search(q_vec, k, params=params)
-            
-            actual_k = min(k, len(valid_ids))
-            gt_ids[i, :actual_k] = indices[0, :actual_k]
-            gt_dst[i, :actual_k] = distances[0, :actual_k]
-
-        return gt_ids, gt_dst
     
     def calculate_selectivity(self):
         base_attributes = self.get_base_attributes()

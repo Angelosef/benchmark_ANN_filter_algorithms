@@ -5,8 +5,8 @@ from src.datasets.yfcc import yfccDataset
 import numpy as np
 
 if __name__ == '__main__':
-    test_sift = False
-    test_glove = False
+    test_sift = True
+    test_glove = True
     test_yfcc = True
     
     if test_sift:
@@ -17,7 +17,7 @@ if __name__ == '__main__':
         
         dataset.inspect_data(
             dataset.get_base_vectors(), 
-            dataset.get_base_attributes(), 
+            dataset.get_base_attributes(),
             dataset.get_query_vectors(), 
             dataset.get_query_filters(restr_count)
         )

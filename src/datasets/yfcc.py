@@ -113,44 +113,6 @@ class yfccDataset(Dataset):
 
         return
     
-    def calculate_ground_truth(self, base_vecs, base_attributes, query_vecs, query_filters):
-        print("calculating ground truth")
-        k = self.neighbors_retrieved
-        num_queries = query_vecs.shape[0]
-        
-        gt_ids = np.full((num_queries, k), -1, dtype=np.int64)
-        gt_dst = np.full((num_queries, k), np.inf, dtype=np.float32)
-
-        d = base_vecs.shape[1]
-        index = faiss.IndexFlatL2(d)
-        index.add(base_vecs)
-        
-        docs_per_word = base_attributes.T.tocsr()
-
-        for q in range(num_queries):
-            q_tags = query_filters[q].indices
-            
-            if len(q_tags) == 0:
-                continue
-
-            valid_ids = docs_per_word[q_tags[0]].indices
-            for tag in q_tags[1:]:
-                valid_ids = np.intersect1d(valid_ids, docs_per_word[tag].indices)
-
-            if len(valid_ids) == 0:
-                print("no valid ids")
-                continue
-
-            selector = faiss.IDSelectorBatch(valid_ids.astype('int64'))
-            params = faiss.SearchParameters(sel=selector)
-            
-            distances, indices = index.search(query_vecs[q:q+1], k, params=params)
-            
-            actual_k = min(k, len(valid_ids))
-            gt_ids[q, :actual_k] = indices[0, :actual_k]
-            gt_dst[q, :actual_k] = distances[0, :actual_k]
-
-        return gt_ids, gt_dst
     
     def calculate_selectivity(self):
         base_attributes = self.get_base_attributes()

@@ -82,37 +82,6 @@ class AttributeIndex:
 
         return np.array(list(valid_ids), dtype='int64')
 
-    def get_valid_ids_cnf(self, query_cnf):
-        """
-        Handles Conjunctive Normal Form (AND of ORs).
-        query_cnf: list of lists of (dim, val) tuples
-        e.g., [[(0, 10), (0, 11)], [(2, 5)]]
-        Means: (Dim 0 == 10 OR Dim 0 == 11) AND (Dim 2 == 5)
-        """
-        if not query_cnf:
-            return np.arange(self.nb, dtype='int64')
-
-        final_result = None
-
-        for clause in query_cnf:
-            # Handle the OR inside the clause
-            clause_set = set()
-            for dim, val in clause:
-                clause_set |= self.inverted_index.get((dim, val), set())
-            
-            # Handle the AND between clauses
-            if final_result is None:
-                final_result = clause_set
-            else:
-                final_result &= clause_set
-                if not final_result: # Early exit
-                    break
-
-        if final_result is None:
-            return np.array([], dtype='int64')
-            
-        return np.array(list(final_result), dtype='int64')
-
 def save_fbin(data, filename):
     """Saves a numpy array (N, D) to .fbin format."""
     n, d = data.shape

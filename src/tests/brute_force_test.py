@@ -12,7 +12,7 @@ class dummy:
 
 if __name__=="__main__":
     test_sift = False
-    test_glove = False
+    test_glove = True
     test_yfcc = True
 
     if test_sift:

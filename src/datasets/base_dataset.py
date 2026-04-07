@@ -2,6 +2,7 @@ import os
 import numpy as np
 from scipy.sparse import issparse
 import json
+from src.algorithms.brute_force import BruteForceIdFilter
 
 class Config:
     def __init__(self, attribute_type, query_type):
@@ -93,6 +94,24 @@ class Dataset:
     
     def get_config(self):
         raise NotImplementedError
+    
+    def calculate_ground_truth(self, base_vecs, base_attributes, query_vecs, query_filters):
+        index = BruteForceIdFilter(self.get_dim(), self.get_metric())
+        index.build(
+            base_vecs, 
+            base_attributes, 
+            None,
+            self.get_config()
+        )
+
+        D, I = index.query(
+            query_vecs,
+            query_filters,
+            self.get_neighbors_retrieved(),
+            None,
+            self.get_config()
+        )
+        return I, D
     
     def prepare(self):
         self.download()

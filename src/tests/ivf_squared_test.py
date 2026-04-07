@@ -3,11 +3,9 @@ from src.benchmark.benchmarkRunner import BenchmarkRunner
 from src.datasets.yfcc import yfccDataset
 from src.algorithms.ivf_squared import IVFSquared, IVFSquaredBuildParameters, IVFSquaredQueryParameters
 from src.logger import BenchmarkLogger
-import multiprocessing
 
 if __name__=="__main__":
     test_yfcc = True
-    multiprocessing.set_start_method("spawn", force=True)
 
     if test_yfcc:
             
