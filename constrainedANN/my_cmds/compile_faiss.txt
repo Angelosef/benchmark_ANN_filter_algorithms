@@ -1,0 +1,6 @@
+# Clean or create a new build directory to avoid conflicts
+cmake -B build . -DFAISS_ENABLE_GPU=OFF -DFAISS_ENABLE_PYTHON=OFF
+
+# Build only the faiss library
+make -C build -j faiss
+make -C build install

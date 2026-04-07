@@ -1,0 +1,11 @@
+*.bin
+index
+query
+sift*/
+indices/
+indices2/
+results2/
+plots.py   
+script.sh 
+unused/
+__pycache__

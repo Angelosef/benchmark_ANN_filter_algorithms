@@ -1,0 +1,8 @@
+git clone -b filter https://github.com/cmuparlay/ParlayANN.git
+cd ParlayANN
+git checkout f7208ba
+git submodule update --init --recursive
+
+cd python
+pip install pybind11
+bash compile.sh
