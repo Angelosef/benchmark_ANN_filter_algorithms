@@ -218,6 +218,33 @@ class yfccDataset(Dataset):
         param_dict = None
         plot_tag_popularity(tag_counts, self.name, dst_path, relative_counts, base_count, param_dict)
         return
+    
+    def calculate_query_tag_counts(self):
+        filters = self.get_query_filters()
+        docs_per_word = filters.T.tocsr()
+        tag_counts = np.diff(docs_per_word.indptr)
+
+        subset_path = self.get_subset_path_or_fail()
+        os.makedirs(os.path.join(subset_path, 'analysis', 'query'), exist_ok=True)
+        np.save(os.path.join(subset_path, 'analysis', 'query', 'tag_counts.npy'), tag_counts)
+
+        return tag_counts
+    
+    def plot_query_tag_popularity(self, relative_counts=False):
+        subset_path = self.get_subset_path_or_fail()
+        query_tag_counts = np.load(os.path.join(subset_path, 'analysis', 'query', 'tag_counts.npy'))
+
+        base_count = None
+        if relative_counts:
+            metadata_path = os.path.join(subset_path, 'metadata.json')
+                
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+                base_count = metadata.get("base_count")
+        dst_path = os.path.join(subset_path, 'analysis', 'query')
+        param_dict = None
+        plot_tag_popularity(query_tag_counts, self.name, dst_path, relative_counts, base_count, param_dict)
+        return
 
     def get_base_vectors(self):
         subset_path = self.get_subset_path_or_fail()

@@ -13,7 +13,7 @@ class dummy:
 if __name__=="__main__":
     test_sift = False
     test_glove = False
-    test_yfcc = False
+    test_yfcc = True
 
     if test_sift:
         print("running brute force on sift dataset")

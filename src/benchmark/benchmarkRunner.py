@@ -17,7 +17,7 @@ class BenchmarkRunner:
         self.index = self.index_class(dim=self.dim, metric=self.metric)        
         
     def run(self):
-        
+        print("start building index")
         start_build = time.time()
         self.index.build(
             self.dataset.get_base_vectors(), 
@@ -27,6 +27,7 @@ class BenchmarkRunner:
         )
         build_time = time.time() - start_build
 
+        print("start querying")
         start_query = time.time()
         D, I = self.index.query(
             self.dataset.get_query_vectors(),

@@ -3,3 +3,5 @@ data/
 __pycache__
 plans.txt
 logs/
+my_indexes/
+temp_data/

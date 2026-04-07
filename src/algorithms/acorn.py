@@ -1,7 +1,7 @@
 from ACORN.acorn_class import IndexACORNFlat
 import numpy as np
 from src.algorithms.baseIndex import BaseANNIndex
-from src.algorithms.utils import build_inverted_attribute_index
+from src.algorithms.utils import AttributeIndex
 
 class AcornBuildParameters:
     def __init__(self, M=32, gamma=12, M_beta=32):
@@ -26,8 +26,7 @@ class Acorn(BaseANNIndex):
 @Acorn.register_build("structured")
 def build_structured(self, vectors, attributes, parameters):
     self.base_vectors = vectors
-    self.base_attributes = attributes
-    self.inverted_index = build_inverted_attribute_index(self.base_attributes)
+    self.attribute_index = AttributeIndex(attributes)
     self.build_params = parameters
     self.batch_size = 64
     self.index = IndexACORNFlat(
@@ -37,13 +36,14 @@ def build_structured(self, vectors, attributes, parameters):
         attributes,
         self.build_params.M_beta
     )
+    self.index.add(vectors)
 
 # --- QUERY STRATEGIES ---
 @Acorn.register_query("structured", "conjunction")
 def query_structured_conjunction(self, vectors, filters, k, parameters):
     self.query_params = parameters
     nq = len(vectors)
-    nb = self.base_attributes.shape[0]
+    nb = self.base_vectors.shape[0]
     D = np.full((len(vectors), k), np.inf, dtype='float32')
     I = np.full((len(vectors), k), -1, dtype='int64')
 
@@ -57,23 +57,9 @@ def query_structured_conjunction(self, vectors, filters, k, parameters):
         for i in range(start_idx, end_idx):
             rel_i = i - start_idx
             current_filter = filters[i]
-            valid_ids = None
+            valid_ids = self.attribute_index.get_valid_ids_conj(current_filter)
 
-            for dim_idx, required_val in enumerate(current_filter):
-                # -1 acts as a wildcard; skip this dimension
-                if required_val == -1:
-                    continue
-                
-                key = (dim_idx, required_val)
-                ids_for_this_dim = set(self.inverted_index.get(key, []))
-
-                if valid_ids is None:
-                    valid_ids = ids_for_this_dim
-                else:
-                    valid_ids.intersection_update(ids_for_this_dim)
-            if valid_ids is None:
-                valid_ids = np.arange(nb)
-            filter_map[rel_i][list(valid_ids)] = 1
+            filter_map[rel_i][valid_ids] = 1
         
         batch_q_vecs = vectors[start_idx:end_idx]
         D_batch, I_batch = self.index.search(batch_q_vecs, k, filter_map)
@@ -86,7 +72,7 @@ def query_structured_conjunction(self, vectors, filters, k, parameters):
 def query_structured_CNF(self, vectors, filters, k, parameters):
     self.query_params = parameters
     nq = len(vectors)
-    nb = self.base_attributes.shape[0]
+    nb = self.base_vectors.shape[0]
     D = np.full((len(vectors), k), np.inf, dtype='float32')
     I = np.full((len(vectors), k), -1, dtype='int64')
 
@@ -100,22 +86,8 @@ def query_structured_CNF(self, vectors, filters, k, parameters):
         for i in range(start_idx, end_idx):
             rel_i = i - start_idx
             current_filter = filters[i]
-            valid_ids = None
-
-            for dim_idx, valid_vals in enumerate(current_filter):
-                dim_union = set()
-                for val in valid_vals:
-                    if val == -1: continue 
-                    key = (dim_idx, val)
-                    if key in self.inverted_index:
-                        dim_union.update(self.inverted_index[key])
-                
-                if valid_ids is None:
-                    valid_ids = dim_union
-                else:
-                    valid_ids.intersection_update(dim_union)
-                    
-            filter_map[rel_i][list(valid_ids)] = 1
+            valid_ids = self.attribute_index.get_valid_ids_cnf(current_filter)
+            filter_map[rel_i][valid_ids] = 1
         
         batch_q_vecs = vectors[start_idx:end_idx]
         D_batch, I_batch = self.index.search(batch_q_vecs, k, filter_map)

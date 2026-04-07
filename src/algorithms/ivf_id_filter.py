@@ -1,7 +1,7 @@
 from src.algorithms.baseIndex import BaseANNIndex
 import faiss
 import numpy as np
-from src.algorithms.utils import intersect_sorted_lists, build_inverted_attribute_index
+from src.algorithms.utils import AttributeIndex
 
 class IVFIdFilterBuildParameters:
     def __init__(self, nlist=100):
@@ -23,10 +23,9 @@ class IVFIdFilter(BaseANNIndex):
 @IVFIdFilter.register_build("structured")
 def build_structured(self, vectors, attributes, parameters):
     self.base_vectors = vectors
-    self.base_attributes = attributes
     self.build_parameters = parameters
 
-    self.inverted_index = build_inverted_attribute_index(self.base_attributes)
+    self.attribute_index = AttributeIndex(attributes)
 
     quantizer = faiss.IndexFlatL2(self.dim)
     self.index = faiss.IndexIVFFlat(quantizer, self.dim, self.build_parameters.nlist)
@@ -44,30 +43,11 @@ def query_structured_conjunction(self, vectors, filters, k, parameters):
 
     for i, q in enumerate(vectors):
         f = filters[i]
-
-        candidate_lists = []
-
-        for dim, val in enumerate(f):
-            if val != -1:
-                key = (dim, val)
-                if key in self.inverted_index:
-                    candidate_lists.append(self.inverted_index[key])
-                else:
-                    candidate_lists = []
-                    break
-
-        if candidate_lists:
-            valid_ids = intersect_sorted_lists(candidate_lists)
-        else:
-            valid_ids = list(range(len(self.base_attributes)))
-
-        if not valid_ids:
-            continue
-
-        id_array = np.ascontiguousarray(list(valid_ids), dtype='int64')
+        valid_ids = self.attribute_index.get_valid_ids_conj(f)
+        
         selector = faiss.IDSelectorBatch(
-            len(id_array),
-            faiss.swig_ptr(id_array)
+            len(valid_ids),
+            faiss.swig_ptr(valid_ids)
         )
 
         params = faiss.SearchParametersIVF()
@@ -89,35 +69,11 @@ def query_structured_CNF(self, vectors, filters, k, parameters):
     I_updated = np.full((len(vectors), k), -1, dtype='int64')
 
     for q_idx, q_vec in enumerate(vectors):
-        # current_filter is a 2D matrix: [dim][valid_values]
         current_filter = filters[q_idx]
-        valid_ids = None
-
-        for dim_idx, valid_vals in enumerate(current_filter):
-            dim_union = set()
-            for val in valid_vals:
-                # Assuming -1 or a specific flag is used for padding if rows aren't equal length
-                if val == -1: continue 
-                
-                key = (dim_idx, val)
-                if key in self.inverted_index:
-                    dim_union.update(self.inverted_index[key])
-            
-            if valid_ids is None:
-                valid_ids = dim_union
-            else:
-                valid_ids.intersection_update(dim_union)
-            
-            if not valid_ids:
-                break
-
-        if not valid_ids:
-            continue
-
-        id_array = np.ascontiguousarray(list(valid_ids), dtype='int64')
+        valid_ids = self.attribute_index.get_valid_ids_cnf(current_filter)
         selector = faiss.IDSelectorBatch(
-            len(id_array),
-            faiss.swig_ptr(id_array)
+            len(valid_ids),
+            faiss.swig_ptr(valid_ids)
         )
 
         params = faiss.SearchParametersIVF()
