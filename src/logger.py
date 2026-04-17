@@ -45,7 +45,8 @@ class BenchmarkLogger:
             "dataset": metadata["dataset_name"],
             "subset_size": metadata["subset_size"],
             "build_params": str(metadata["build_params"]),
-            "query_params": str(metadata["query_params"])
+            "query_params": str(metadata["query_params"]),
+            "ds_query_param": metadata["ds_query_param"]
         }
         
         df = pd.DataFrame([summary])

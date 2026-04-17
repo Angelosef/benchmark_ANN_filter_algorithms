@@ -8,7 +8,7 @@ from src.logger import BenchmarkLogger
 if __name__=="__main__":
     test_sift = True
     test_glove = True
-    test_yfcc = True
+    test_yfcc = False
 
     if test_sift:
         subset_size = 0.1
@@ -20,7 +20,7 @@ if __name__=="__main__":
             print("num_restr = ", num_restrictions)
             
             build_params = HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)
-            query_params = HNSWPostfilterQueryParameters(efSearch=100, initial_k=200)
+            query_params = HNSWPostfilterQueryParameters(efSearch=10, initial_k=100)
     
             print("initializing benchmark")
             runner = BenchmarkRunner(dataset, num_restrictions, HNSWPostfilter, build_params, query_params)
@@ -39,11 +39,11 @@ if __name__=="__main__":
 
         dataset = GloVeDataset(subset_size, k)
         print("running IVF on glove dataset")
-        build_params = HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)
+        build_params = HNSWPostfilterBuildParameters(graph_degree=16, efConstruction=100)
         query_params = HNSWPostfilterQueryParameters(efSearch=100, initial_k=200)
 
         print("initializing benchmark")
-        runner = BenchmarkRunner(dataset, num_restrictions, HNSWPostfilter, build_params, query_params)
+        runner = BenchmarkRunner(dataset, None, HNSWPostfilter, build_params, query_params)
         print("running benchmark")
         D, I, metadata = runner.run()
 
@@ -62,7 +62,7 @@ if __name__=="__main__":
         build_params = HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)
         query_params = HNSWPostfilterQueryParameters(efSearch=100, initial_k=200)
         print("initializing benchmark")
-        runner = BenchmarkRunner(dataset, num_restrictions, HNSWPostfilter, build_params, query_params)
+        runner = BenchmarkRunner(dataset, None, HNSWPostfilter, build_params, query_params)
         print("running benchmark")
         D, I, metadata = runner.run()
 

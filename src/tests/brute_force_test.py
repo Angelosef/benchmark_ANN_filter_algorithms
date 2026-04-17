@@ -4,7 +4,6 @@ from src.datasets.glove import GloVeDataset
 from src.datasets.yfcc import yfccDataset
 from src.algorithms.brute_force import BruteForceIdFilter
 from src.logger import BenchmarkLogger
-import numpy as np
 
 class dummy:
     def __init__(self):
@@ -13,7 +12,7 @@ class dummy:
 if __name__=="__main__":
     test_sift = False
     test_glove = True
-    test_yfcc = True
+    test_yfcc = False
 
     if test_sift:
         print("running brute force on sift dataset")

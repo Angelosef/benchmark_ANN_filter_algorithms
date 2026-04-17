@@ -3,12 +3,12 @@ from scipy.sparse import csr_matrix
 from collections import defaultdict
 import mmh3
 
-
+"""
 class AttributeIndex:
     def __init__(self, attributes):
-        """
+        
         attributes: np.ndarray (nb x num_dims) 
-        """
+        
         self.nb = attributes.shape[0]
         self.num_dims = attributes.shape[1]
         self.inverted_index = self._build_index(attributes)
@@ -21,10 +21,10 @@ class AttributeIndex:
         return inverted
 
     def get_valid_ids_conj(self, filter):
-        """
+        
         filter: 1D array/list [val_dim0, val_dim1, ...]
         Logic: AND between dimensions. -1 is a wildcard.
-        """
+        
         valid_ids = None
 
         for dim_idx, required_val in enumerate(filter):
@@ -48,10 +48,10 @@ class AttributeIndex:
         return np.array(list(valid_ids), dtype='int64')
 
     def get_valid_ids_cnf(self, filter):
-        """
+        
         filter: List of lists [[vals_dim0], [vals_dim1], ...]
         Logic: OR between values in a dimension, AND between dimensions.
-        """
+        
         valid_ids = None
 
         for dim_idx, valid_vals in enumerate(filter):
@@ -82,6 +82,154 @@ class AttributeIndex:
 
         return np.array(list(valid_ids), dtype='int64')
 
+"""
+
+#-----------------
+
+class AttributeIndex:
+    def __init__(self, attributes):
+        """
+        attributes: np.ndarray (nb x num_dims)
+        """
+        self.nb, self.num_dims = attributes.shape
+        self.index = self._build_index(attributes)
+
+    def _build_index(self, attributes):
+        index = [defaultdict(list) for _ in range(self.num_dims)]
+
+        # collect indices
+        for i in range(self.nb):
+            for d in range(self.num_dims):
+                val = attributes[i, d]
+                index[d][val].append(i)
+
+        # convert lists → compact numpy arrays
+        for d in range(self.num_dims):
+            for val in index[d]:
+                index[d][val] = np.array(index[d][val], dtype=np.int64)
+
+        return index
+    
+    def get_valid_ids_conj(self, flt):
+        result = None
+
+        for d, val in enumerate(flt):
+            if val == -1:
+                continue
+
+            ids = self.index[d].get(val)
+            if ids is None:
+                return np.empty(0, dtype=np.int64)
+
+            if result is None:
+                result = ids
+            else:
+                result = np.intersect1d(result, ids, assume_unique=True)
+
+            if result.size == 0:
+                return result
+
+        if result is None:
+            return np.arange(self.nb, dtype=np.int64)
+
+        return result
+    
+    def get_valid_ids_cnf(self, flt):
+        result = None
+
+        for d, vals in enumerate(flt):
+            if -1 in vals:
+                continue
+
+            # union inside dimension
+            arrays = []
+            for v in vals:
+                ids = self.index[d].get(v)
+                if ids is not None:
+                    arrays.append(ids)
+
+            if not arrays:
+                return np.empty(0, dtype=np.int64)
+
+            dim_union = np.unique(np.concatenate(arrays))
+
+            if result is None:
+                result = dim_union
+            else:
+                result = np.intersect1d(result, dim_union, assume_unique=True)
+
+            if result.size == 0:
+                return result
+
+        if result is None:
+            return np.arange(self.nb, dtype=np.int64)
+
+        return result
+
+#----------------
+
+class BitsetAttributeIndex:
+    def __init__(self, attributes):
+        """
+        attributes: np.ndarray (nb x num_dims)
+        """
+        self.nb, self.num_dims = attributes.shape
+        self.index = self._build_index(attributes)
+
+    def _build_index(self, attributes):
+        index = [defaultdict(lambda: np.zeros(self.nb, dtype=bool))
+                 for _ in range(self.num_dims)]
+
+        for i in range(self.nb):
+            for d in range(self.num_dims):
+                val = attributes[i, d]
+                index[d][val][i] = True
+
+        return index
+    
+    def get_valid_ids_conj(self, flt):
+        mask = np.ones(self.nb, dtype=bool)
+
+        for d, val in enumerate(flt):
+            if val == -1:
+                continue
+
+            bitset = self.index[d].get(val)
+            if bitset is None:
+                return np.empty(0, dtype=np.int64)
+
+            mask &= bitset
+
+            if not mask.any():
+                return np.empty(0, dtype=np.int64)
+
+        return np.flatnonzero(mask).astype(np.int64)
+    
+    def get_valid_ids_cnf(self, flt):
+        mask = np.ones(self.nb, dtype=bool)
+
+        for d, vals in enumerate(flt):
+            if -1 in vals:
+                continue
+
+            dim_mask = np.zeros(self.nb, dtype=bool)
+
+            for v in vals:
+                bitset = self.index[d].get(v)
+                if bitset is not None:
+                    dim_mask |= bitset
+
+            if not dim_mask.any():
+                return np.empty(0, dtype=np.int64)
+
+            mask &= dim_mask
+
+            if not mask.any():
+                return np.empty(0, dtype=np.int64)
+
+        return np.flatnonzero(mask).astype(np.int64)
+
+# --------------
 def save_fbin(data, filename):
     """Saves a numpy array (N, D) to .fbin format."""
     n, d = data.shape
@@ -215,3 +363,88 @@ class HybridBloomEncoder:
                     all_indices.add(tail_start + idx)
                     
         return list(all_indices)
+
+class TagAssigner:
+    def __init__(self, base_dataset, num_bins):
+        self.num_bins = num_bins
+        # Calculate empirical probabilities from the dataset
+        self.probs = self.calculate_probs(base_dataset)
+        # Perform the optimization
+        self.assignment = self.assign_tags(self.probs, self.num_bins)
+
+    @staticmethod
+    def calculate_probs(base_dataset):
+        num_elems = base_dataset.shape[0]
+        # Sum of columns gives frequency of each tag
+        tag_counts = np.asarray(base_dataset.sum(axis=0)).flatten()
+        return tag_counts / num_elems
+
+    @staticmethod
+    def assign_tags(probs, num_bins):
+        num_tags = len(probs)
+        
+        eps = 1e-12
+        p_safe = np.clip(probs, eps, 1 - eps)
+        
+        log_not_p = np.log(1 - p_safe)
+        p_ratio = p_safe / (1 - p_safe)
+        
+        bin_sum_log_not_p = np.zeros(num_bins)
+        bin_sum_p_inv_p = np.zeros(num_bins)
+        
+        assignment = np.zeros(num_tags, dtype=np.int32)
+        
+        sorted_indices = np.argsort(probs)[::-1]
+        
+        for tag_idx in sorted_indices:
+            l_np = log_not_p[tag_idx]
+            p_r = p_ratio[tag_idx]
+            
+            future_scores = (bin_sum_log_not_p + l_np) + np.log(1 + bin_sum_p_inv_p + p_r)
+            best_bin = np.argmax(future_scores)
+            
+            bin_sum_log_not_p[best_bin] += l_np
+            bin_sum_p_inv_p[best_bin] += p_r
+            assignment[tag_idx] = best_bin
+            
+        return assignment
+    
+    def get_assignment(self):
+        return self.assignment
+    
+    def get_num_bins(self):
+        return self.num_bins
+
+class TagEncoder:
+    def __init__(self, tag_assignment, num_bins):
+        
+        self.tag_assignment = tag_assignment
+        self.num_bins = num_bins
+        return
+    
+    def get_encoded_data(self, base_csr_matrix):
+        num_elems = base_csr_matrix.shape[0]
+        encoded_data = np.zeros((num_elems, self.num_bins), dtype=np.int64)
+        
+        coo = base_csr_matrix.tocoo()
+        
+        for i, tag_idx in zip(coo.row, coo.col):
+            bin_idx = self.tag_assignment[tag_idx]
+            encoded_data[i, bin_idx] = tag_idx + 1
+        
+        return encoded_data
+    
+    def get_encoded_queries(self, filters_csr):
+        num_queries = filters_csr.shape[0]
+        encoded_queries = np.full((num_queries, self.num_bins), -1, dtype=np.int64)
+        for q_idx in range(num_queries):
+            f_start = filters_csr.indptr[q_idx]
+            f_end = filters_csr.indptr[q_idx+1]
+            required_tags = filters_csr.indices[f_start:f_end]
+
+            for tag_idx in required_tags:
+                bin_idx = self.tag_assignment[tag_idx]
+                encoded_queries[q_idx][bin_idx] = tag_idx + 1
+        
+        return encoded_queries
+

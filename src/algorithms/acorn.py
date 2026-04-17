@@ -1,13 +1,14 @@
 from ACORN.acorn_class import IndexACORNFlat
 import numpy as np
 from src.algorithms.baseIndex import BaseANNIndex
-from src.algorithms.utils import AttributeIndex
+from src.algorithms.utils import AttributeIndex, TagAssigner, TagEncoder
 
 class AcornBuildParameters:
-    def __init__(self, M=32, gamma=12, M_beta=32):
+    def __init__(self, M=32, gamma=12, M_beta=32, num_bins=None):
         self.M = M
         self.gamma = gamma
         self.M_beta = M_beta
+        self.num_bins = num_bins
 
 class AcornQueryParameters:
     def __init__(self, efSearch=10):
@@ -95,3 +96,19 @@ def query_structured_CNF(self, vectors, filters, k, parameters):
         I[start_idx:end_idx] = I_batch
 
     return D, I
+
+@Acorn.register_build("sparse")
+def build_sparse_translator(self, vectors, attributes, parameters):
+    
+    tag_assigner = TagAssigner(attributes, parameters.num_bins)
+    assignment = tag_assigner.get_assignment()
+    self.attribute_encoder = TagEncoder(assignment, parameters.num_bins)
+    encoded_attrs = self.attribute_encoder.get_encoded_data(attributes)
+    
+    return build_structured(self, vectors, encoded_attrs, parameters)
+
+@Acorn.register_query("sparse", "conjunction")
+def query_sparse_conjunction_translator(self, vectors, filters, k, parameters):
+    encoded_filters = self.attribute_encoder.get_encoded_queries(filters)
+
+    return query_structured_conjunction(self, vectors, encoded_filters, k, parameters)

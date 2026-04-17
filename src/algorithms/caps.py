@@ -26,7 +26,7 @@ class CAPS(BaseANNIndex):
         now = datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
 
-        folder_name = f"index_{timestamp}"
+        folder_name = f"caps_index_{timestamp}"
         self.index_path = os.path.join("my_indexes", folder_name)
     
     def name(self):
@@ -40,6 +40,7 @@ def build_structured(self, vectors, attributes, parameters):
     prefixes = np.char.add(np.arange(num_cols).astype(str), "_")
     attr_str = attributes.astype(str)
     props = np.char.add(prefixes, attr_str)
+    
     self.index = CapsIndex(base_vecs=vectors, props=props, nc=self.build_params.nc)
     
     self.index.save_index(self.index_path)

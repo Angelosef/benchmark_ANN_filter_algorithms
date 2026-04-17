@@ -8,10 +8,10 @@ if __name__=="__main__":
     print("setting parameters")
     subset_size = 0.1
     k = 10
-    num_restrictions = 2
+    num_restrictions = 1
 
     build_params = CAPSBuildParameters(nc=100)
-    query_params = CAPSQueryParameters(nprobe=100)
+    query_params = CAPSQueryParameters(nprobe=500)
 
     dataset = siftDataset(subset_size, k)
     print("initializing benchmark")

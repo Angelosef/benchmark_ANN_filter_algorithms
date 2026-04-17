@@ -7,8 +7,8 @@ from src.logger import BenchmarkLogger
 
 
 if __name__=="__main__":
-    test_sift = True
-    test_glove = True
+    test_sift = False
+    test_glove = False
     test_yfcc = True
 
     if test_sift:
@@ -41,10 +41,10 @@ if __name__=="__main__":
         dataset = GloVeDataset(subset_size, k)
         print("running IVF on glove dataset")
         build_params = IVFIdFilterBuildParameters(nlist=100)
-        query_params = IVFIdFilterQueryParameters(nprobe=10)
+        query_params = IVFIdFilterQueryParameters(nprobe=20)
 
         print("initializing benchmark")
-        runner = BenchmarkRunner(dataset, num_restrictions, IVFIdFilter, build_params, query_params)
+        runner = BenchmarkRunner(dataset, None, IVFIdFilter, build_params, query_params)
         print("running benchmark")
         D, I, metadata = runner.run()
 
@@ -60,11 +60,11 @@ if __name__=="__main__":
 
         dataset = yfccDataset(subset_size, k)
         print("running IVF on yfcc dataset")
-        build_params = IVFIdFilterBuildParameters(nlist=100)
-        query_params = IVFIdFilterQueryParameters(nprobe=10)
+        build_params = IVFIdFilterBuildParameters(nlist=200)
+        query_params = IVFIdFilterQueryParameters(nprobe=50)
 
         print("initializing benchmark")
-        runner = BenchmarkRunner(dataset, num_restrictions, IVFIdFilter, build_params, query_params)
+        runner = BenchmarkRunner(dataset, None, IVFIdFilter, build_params, query_params)
         print("running benchmark")
         D, I, metadata = runner.run()
 

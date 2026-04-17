@@ -6,3 +6,4 @@ logs/
 my_indexes/
 temp_data/
 ParlayANN/python/_ParlayANNpy.cpython-312-x86_64-linux-gnu.so
+benchmark_plots/

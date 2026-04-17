@@ -1,8 +1,8 @@
 import faiss
 import numpy as np
 from src.algorithms.baseIndex import BaseANNIndex
-from src.algorithms.utils import AttributeIndex
-from src.algorithms.utils import HybridBloomEncoder
+from src.algorithms.utils import AttributeIndex, BitsetAttributeIndex
+from src.algorithms.utils import HybridBloomEncoder, TagAssigner, TagEncoder
 
 class BruteForceIdFilter(BaseANNIndex):
     def __init__(self, dim, metric):
@@ -111,73 +111,24 @@ def query_sparse_conjunction(self, vectors, filters, k, parameters):
 
     return D, I
 
-def build_structured_boolean(self, vectors, attributes, parameters):
-    self.base_vectors = vectors
-    self.attributes = attributes
-    sub_index = faiss.IndexFlatL2(self.dim)
-    self.index = faiss.IndexIDMap(sub_index)
-    
-    ids = np.arange(len(vectors)).astype('int64')
-    self.index.add_with_ids(self.base_vectors, ids)
-
-def query_structured_boolean(self, vectors, filters_list, k, parameters):
-    nq = vectors.shape[0]
-    D = np.full((nq, k), np.inf, dtype='float32')
-    I = np.full((nq, k), -1, dtype='int64')
-
-    for q_idx in range(nq):
-        q_vec = vectors[q_idx].reshape(1, -1)
-        required_bit_indices = filters_list[q_idx]
-        
-        if len(required_bit_indices) == 0:
-            dist, indices = self.index.search(q_vec, k)
-        else:
-            mask = (self.attributes[:, required_bit_indices] == 1).all(axis=1)
-            valid_ids = np.where(mask)[0].astype('int64')
-            
-            if len(valid_ids) == 0:
-                continue
-
-            selector = faiss.IDSelectorBatch(valid_ids)
-            dist, indices = self.index.search(q_vec, k, params=faiss.SearchParameters(sel=selector))
-        
-        D[q_idx] = dist[0]
-        I[q_idx] = indices[0]
-
-    return D, I
 
 @BruteForceIdFilter.register_build("sparse-")
 def build_sparse_translator(self, vectors, attributes, parameters):
+    # 500+ for 95%+ recall
     print("using sparse build translator")
-    m = 4000
-    # k_min = 2
-    # k_max = 35
-    n_head = 1024
-    k_tail = 3
+    num_bins = 500
+    print("num_bins = ", num_bins)
 
-    print("m = ", m)
-    # print("k_min =", k_min)
-    # print("k_max = ", k_max)
-    print("n_head = ", n_head)
-    print("k_tail = ", k_tail)
-
-    self.attribute_encoder = HybridBloomEncoder(m, n_head, k_tail)
-    encoded_attrs = self.attribute_encoder.encode_csr(attributes)
+    tag_assigner = TagAssigner(attributes, num_bins)
+    assignment = tag_assigner.get_assignment()
+    self.attribute_encoder = TagEncoder(assignment, num_bins)
+    encoded_attrs = self.attribute_encoder.get_encoded_data(attributes)
     
-    return build_structured_boolean(self, vectors, encoded_attrs, parameters)
+    return build_structured(self, vectors, encoded_attrs, parameters)
 
 @BruteForceIdFilter.register_query("sparse-", "conjunction-")
 def query_sparse_conjunction_translator(self, vectors, filters, k, parameters):
     print("using sparse query translator")
-    nq = vectors.shape[0]
-    all_query_bits = []
+    encoded_filters = self.attribute_encoder.get_encoded_queries(filters)
 
-    for q_idx in range(nq):
-        f_start = filters.indptr[q_idx]
-        f_end = filters.indptr[q_idx+1]
-        required_tags = filters.indices[f_start:f_end]
-        
-        target_bits = self.attribute_encoder.create_query_indices(required_tags)
-        all_query_bits.append(target_bits)
-
-    return query_structured_boolean(self, vectors, all_query_bits, k, parameters)
+    return query_structured_conjunction(self, vectors, encoded_filters, k, parameters)

@@ -2,6 +2,10 @@ from src.algorithms.baseIndex import BaseANNIndex
 from src.datasets.base_dataset import Dataset
 import time
 from typing import Type
+import os, psutil
+
+def get_rss():
+    return psutil.Process(os.getpid()).memory_info().rss
 
 class BenchmarkRunner:
     def __init__(self, dataset: Dataset, ds_query_param, index_class: Type[BaseANNIndex], build_params, query_params):
@@ -17,6 +21,8 @@ class BenchmarkRunner:
         self.index = self.index_class(dim=self.dim, metric=self.metric)        
         
     def run(self):
+        baseline_mem = get_rss()
+
         print("start building index")
         start_build = time.time()
         self.index.build(
@@ -26,6 +32,10 @@ class BenchmarkRunner:
             self.config
         )
         build_time = time.time() - start_build
+
+        after_build_mem = get_rss()
+        index_memory = after_build_mem - baseline_mem
+        print(f"Index Memory: {index_memory / 1e6:.2f} MB")
 
         print("start querying")
         start_query = time.time()
@@ -43,6 +53,7 @@ class BenchmarkRunner:
             "dataset_name": self.dataset.get_name(),
             "build_time": build_time,
             "query_time": query_time,
+            "index_memory": index_memory,
             "build_params": vars(self.build_params),
             "query_params": vars(self.query_params),
             "base_count": self.dataset.get_base_count(),

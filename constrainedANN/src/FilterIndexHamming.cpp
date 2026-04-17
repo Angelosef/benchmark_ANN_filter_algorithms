@@ -295,32 +295,70 @@ void FilterIndex::findNearestNeighbor(float* query, vector<string> Stprops, int 
             bin = bin*(treelen+1);
             // go through each sub partition
             bool checkremaining=true;
-            for (uint16_t u=0;u<treelen; u++){
-                if (props[maxMC[u*3+0]]==255){
-                    for (int i =counts[bin+u]; i< counts[bin+u+1] && seen<max_num_distances; i++){
-                        //check if constraint statisfies
-                        int j =0;
-                        while (j<numAttr && (properties_reordered[i*numAttr +j]== props[j] | props[j]==255)) j++; 
-                        if (j==numAttr){
-                            Candidates[seen]=i; 
-                            seen++;
-                        }
-                    }
-                }
-                else if (maxMC[u*3+1] == props[maxMC[u*3+0]]){
-                    for (int i =counts[bin+u]; i< counts[bin+u+1] && seen<max_num_distances; i++){
-                        //check if constraint statisfies
-                        int j =0;
-                        while (j<numAttr && (properties_reordered[i*numAttr +j]== props[j] | props[j]==255)) j++; 
-                        if (j==numAttr){
-                            Candidates[seen]=i; 
-                            seen++;
-                        }
-                    }
-                    checkremaining = false;
-                    break;
+   //         =========================================
+            bool scanned_full_cluster = false;
+
+for (uint16_t u = 0; u < treelen; u++) {
+
+    if (props[maxMC[u*3+0]] == 255) {
+
+        // wildcard → scan full cluster ONCE
+        for (int uu = 0; uu < treelen + 1; uu++) {
+            for (int i = counts[bin+uu]; 
+                 i < counts[bin+uu+1] && seen < max_num_distances; 
+                 i++) {
+
+                int j = 0;
+                while (j < numAttr &&
+                      (properties_reordered[i*numAttr + j] == props[j] || props[j] == 255)) j++;
+
+                if (j == numAttr) {
+                    Candidates[seen++] = i;
                 }
             }
+        }
+
+        scanned_full_cluster = true;
+        break;
+    }
+
+    else if (maxMC[u*3+1] == props[maxMC[u*3+0]]) {
+
+        // normal case: scan one subcluster
+        for (int i = counts[bin+u]; 
+             i < counts[bin+u+1] && seen < max_num_distances; 
+             i++) {
+
+            int j = 0;
+            while (j < numAttr &&
+                  (properties_reordered[i*numAttr + j] == props[j] || props[j] == 255)) j++;
+
+            if (j == numAttr) {
+                Candidates[seen++] = i;
+            }
+        }
+
+        scanned_full_cluster = false;
+        break;
+    }
+}
+
+// fallback: if no condition matched
+if (!scanned_full_cluster) {
+    for (int i = counts[bin + treelen]; 
+         i < counts[bin + treelen + 1] && seen < max_num_distances; 
+         i++) {
+
+        int j = 0;
+        while (j < numAttr &&
+              (properties_reordered[i*numAttr + j] == props[j] || props[j] == 255)) j++;
+
+        if (j == numAttr) {
+            Candidates[seen++] = i;
+        }
+    }
+}
+ //           ===========================================
             if (checkremaining == true){
                 for (int i =counts[bin+ treelen]; i< counts[bin+ treelen+1] && seen<max_num_distances; i++){
                         //check if constraint statisfies

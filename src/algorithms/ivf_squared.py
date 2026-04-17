@@ -1,13 +1,10 @@
 from src.algorithms.baseIndex import BaseANNIndex
 from datetime import datetime
 
-import numpy as np
 import ParlayANN.python.wrapper as wp
 import os
-import multiprocessing
 from src.algorithms.utils import save_fbin, save_csr_to_spmat
 import shutil
-from scipy import sparse
 
 class IVFSquaredBuildParameters:
     def __init__(self, weight_classes=(100_000, 400_000), max_degrees=(8, 10, 12), 
@@ -38,6 +35,8 @@ class IVFSquared(BaseANNIndex):
         self.temp_data_path = os.path.join("temp_data", f"data_{timestamp}")
         if os.path.exists(self.index_path):
             shutil.rmtree(self.index_path)
+        if os.path.exists(self.temp_data_path):
+            shutil.rmtree(self.temp_data_path)
     
         os.makedirs(self.index_path)
         os.makedirs(self.temp_data_path)
@@ -111,6 +110,5 @@ def query_sparse_ivf_squared(self, vectors, filters, k, parameters):
         query_filters.append(q_filter)
     
     neighbors, distances = self.index.batch_filter_search(vectors, query_filters, num_q, k)
-    # shutil.rmtree(self.temp_data_path)
-    # shutil.rmtree(self.index_path)
+    
     return distances, neighbors
