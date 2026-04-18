@@ -1,10 +1,9 @@
 from src.datasets.base_dataset import Dataset, Config
 import os
 import numpy as np
-from src.datasets.utils import (download_file, load_vectors_from_u8bin, load_metadata, plot_selectivity, plot_tag_popularity)
+from src.datasets.utils import (download_file, load_vectors_from_u8bin, load_metadata, plot_selectivity, plot_tag_popularity, save_gt_isolated)
 import json
-import faiss
-from scipy.sparse import csr_matrix, save_npz, load_npz, issparse
+from scipy.sparse import save_npz, load_npz
 
 class yfccDataset(Dataset):
     def __init__(self, subset_size=1.0, neighbors_retrieved=10):
@@ -53,6 +52,8 @@ class yfccDataset(Dataset):
         np.save(os.path.join(self.dataset_path, 'queries', 'vectors.npy'), query_vecs)
         save_npz(os.path.join(self.dataset_path, 'base', 'attributes.npz'), base_attributes)
         save_npz(os.path.join(self.dataset_path, 'queries', 'filters.npz'), filters)
+
+        self.save_global_metadata(base_vecs, query_vecs)
         return
     
     def create_subset(self):
@@ -63,15 +64,15 @@ class yfccDataset(Dataset):
 
         os.makedirs(subset_path, exist_ok=True)
 
-        base_vecs = np.load(os.path.join(self.dataset_path, 'base', 'vectors.npy'))
-        query_vecs = np.load(os.path.join(self.dataset_path, 'queries', 'vectors.npy'))
+        full_base_count = self.get_full_base_count()
+        full_query_count = self.get_full_query_count()
 
-        base_size = int(base_vecs.shape[0] * self.subset_size)
-        query_size = int(query_vecs.shape[0] * self.subset_size)
+        base_size = int(full_base_count * self.subset_size)
+        query_size = int(full_query_count * self.subset_size)
 
-        base_ids = self.rng.choice(np.arange(base_vecs.shape[0]), size=base_size, replace=False)
+        base_ids = self.rng.choice(np.arange(full_base_count), size=base_size, replace=False)
         base_ids.sort()
-        query_ids = self.rng.choice(np.arange(query_vecs.shape[0]), size=query_size, replace=False)
+        query_ids = self.rng.choice(np.arange(full_query_count), size=query_size, replace=False)
         query_ids.sort()
 
         os.makedirs(os.path.join(subset_path, 'base'), exist_ok=True)
@@ -94,22 +95,16 @@ class yfccDataset(Dataset):
         metadata = {
             "subset_size": self.subset_size,
             "neighbors_retrieved": self.neighbors_retrieved,
-            "vector_dim": base_vecs.shape[1],
-            "vector_dtype": str(base_vecs.dtype),
             "base_count": len(base_ids),
             "query_count": len(query_ids)
         }
         with open(os.path.join(subset_path, 'metadata.json'), 'w') as f:
             json.dump(metadata, f)
 
-        base_vecs = self.get_base_vectors()
-        base_attributes = self.get_base_attributes()
-        query_vecs = self.get_query_vectors()
-        query_filters = self.get_query_filters()
 
-        gt_ids, gt_dst = self.calculate_ground_truth(base_vecs, base_attributes, query_vecs, query_filters)
-        np.save(os.path.join(subset_path, 'queries', 'ground_truth_ids.npy'), gt_ids)
-        np.save(os.path.join(subset_path, 'queries', 'distances.npy'), gt_dst)
+        gt_ids_path = os.path.join(subset_path, 'queries')
+        gt_dst_path = os.path.join(subset_path, 'queries')
+        save_gt_isolated(self, None, gt_dst_path, gt_ids_path)
 
         return
     

@@ -4,7 +4,9 @@ import numpy as np
 import struct
 from scipy.sparse import csr_matrix
 import matplotlib.pyplot as plt
-
+from src.benchmark.benchmarkRunner import BenchmarkRunner
+from src.algorithms.brute_force import BruteForceIdFilter
+import multiprocessing
 
 def download_file(url, dst_path, overwrite=False):
     if os.path.exists(dst_path) and not overwrite:
@@ -194,3 +196,24 @@ def plot_tag_popularity(counts, ds_name, dst_path, relative_counts=False, base_c
         prefix = 'relative'
     plt.savefig(os.path.join(dst_path, f"{prefix}_tag_popularity.png"), dpi=300)
     plt.close()
+
+class dummy:
+    def __init__(self):
+        pass
+
+def save_ground_truth(dataset, ds_query_param, gt_dst_path, gt_ids_path):
+    br = BenchmarkRunner(dataset, ds_query_param, BruteForceIdFilter, dummy(), dummy())
+    D, I, metadata = br.run()
+    os.makedirs(gt_ids_path, exist_ok=True)
+    os.makedirs(gt_dst_path, exist_ok=True)
+    np.save(os.path.join(gt_ids_path, 'ground_truth_ids.npy'), I)
+    np.save(os.path.join(gt_dst_path, 'distances.npy'), D)
+
+def save_gt_isolated(dataset, ds_query_param, gt_dst_path, gt_ids_path):
+    p = multiprocessing.Process(
+        target=save_ground_truth,
+        args=(dataset, ds_query_param, gt_dst_path, gt_ids_path)
+    )
+            
+    p.start()
+    p.join()

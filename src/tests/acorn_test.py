@@ -7,7 +7,7 @@ from src.logger import BenchmarkLogger
 
 
 if __name__=="__main__":
-    test_sift = False
+    test_sift = True
     test_glove = True
     test_yfcc = False
 

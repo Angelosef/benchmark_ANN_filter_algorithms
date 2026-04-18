@@ -41,23 +41,30 @@ def query_structured_conjunction(self, vectors, filters, k, parameters):
     D = np.full((len(vectors), k), np.inf)
     I = np.full((len(vectors), k), -1)
 
-    for i, q in enumerate(vectors):
-        f = filters[i]
+    for q_idx, q_vec in enumerate(vectors):
+        f = filters[q_idx]
         valid_ids = self.attribute_index.get_valid_ids_conj(f)
         
-        selector = faiss.IDSelectorBatch(
+        sel = faiss.IDSelectorBatch(
             len(valid_ids),
             faiss.swig_ptr(valid_ids)
         )
 
-        params = faiss.SearchParametersIVF()
-        params.sel = selector
+        params = faiss.SearchParametersIVF(sel=sel)
         params.nprobe = self.query_parameters.nprobe
 
-        dist, indices = self.index.search(np.array([q]), k, params=params)
+        dist, indices = self.index.search(
+            q_vec.reshape(1, -1),
+            k,
+            params=params
+        )
+        D[q_idx] = dist[0]
+        I[q_idx] = indices[0]
 
-        D[i] = dist
-        I[i] = indices
+        params.sel = None
+        del params
+        del sel
+
 
     return D, I
 
@@ -65,27 +72,33 @@ def query_structured_conjunction(self, vectors, filters, k, parameters):
 @IVFIdFilter.register_query("structured", "CNF")
 def query_structured_CNF(self, vectors, filters, k, parameters):
     self.query_parameters = parameters
-    D_updated = np.full((len(vectors), k), np.inf, dtype='float32')
-    I_updated = np.full((len(vectors), k), -1, dtype='int64')
+    D = np.full((len(vectors), k), np.inf, dtype='float32')
+    I = np.full((len(vectors), k), -1, dtype='int64')
 
     for q_idx, q_vec in enumerate(vectors):
         current_filter = filters[q_idx]
         valid_ids = self.attribute_index.get_valid_ids_cnf(current_filter)
-        selector = faiss.IDSelectorBatch(
+        sel = faiss.IDSelectorBatch(
             len(valid_ids),
             faiss.swig_ptr(valid_ids)
         )
 
-        params = faiss.SearchParametersIVF()
-        params.sel = selector
+        params = faiss.SearchParametersIVF(sel=sel)
         params.nprobe = self.query_parameters.nprobe
 
-        dist, indices = self.index.search(q_vec.reshape(1, -1), k, params=params)
+        dist, indices = self.index.search(
+            q_vec.reshape(1, -1),
+            k,
+            params=params
+        )
+        D[q_idx] = dist[0]
+        I[q_idx] = indices[0]
 
-        D_updated[q_idx] = dist[0]
-        I_updated[q_idx] = indices[0]
+        params.sel = None
+        del params
+        del sel
 
-    return D_updated, I_updated
+    return D, I
 
 @IVFIdFilter.register_build("sparse")
 def build_sparse(self, vectors, attributes, parameters):
@@ -104,8 +117,8 @@ def build_sparse(self, vectors, attributes, parameters):
 def query_sparse_conjunction(self, vectors, filters, k, parameters):
     # filters is a CSR matrix where rows = query, cols = required tags
     self.query_parameters = parameters
-    D_updated = np.full((len(vectors), k), np.inf, dtype='float32')
-    I_updated = np.full((len(vectors), k), -1, dtype='int64')
+    D = np.full((len(vectors), k), np.inf, dtype='float32')
+    I = np.full((len(vectors), k), -1, dtype='int64')
 
     for q_idx, q_vec in enumerate(vectors):
         f_start = filters.indptr[q_idx]
@@ -131,19 +144,28 @@ def query_sparse_conjunction(self, vectors, filters, k, parameters):
 
         if valid_ids_set is not None and not valid_ids_set:
             continue
-
+        
+        valid_ids = np.array(list(valid_ids_set), dtype='int64')
         params = faiss.SearchParametersIVF()
+
+        sel = faiss.IDSelectorBatch(
+            len(valid_ids),
+            faiss.swig_ptr(valid_ids)
+        )
+
+        params = faiss.SearchParametersIVF(sel=sel)
         params.nprobe = self.query_parameters.nprobe
 
-        if valid_ids_set is not None:
-            id_array = np.array(list(valid_ids_set), dtype='int64')
-            params.sel = faiss.IDSelectorBatch(len(id_array), faiss.swig_ptr(id_array))
-        else:
-            params.sel = None 
+        dist, indices = self.index.search(
+            q_vec.reshape(1, -1),
+            k,
+            params=params
+        )
+        D[q_idx] = dist[0]
+        I[q_idx] = indices[0]
 
-        dist, indices = self.index.search(q_vec.reshape(1, -1), k, params=params)
+        params.sel = None
+        del params
+        del sel
 
-        D_updated[q_idx] = dist[0]
-        I_updated[q_idx] = indices[0]
-
-    return D_updated, I_updated
+    return D, I

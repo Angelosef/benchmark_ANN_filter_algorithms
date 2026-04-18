@@ -7,8 +7,8 @@ from src.logger import BenchmarkLogger
 
 
 if __name__=="__main__":
-    test_sift = False
-    test_glove = False
+    test_sift = True
+    test_glove = True
     test_yfcc = True
 
     if test_sift:
@@ -21,7 +21,7 @@ if __name__=="__main__":
             print("num_restr = ", num_restrictions)
             
             build_params = IVFIdFilterBuildParameters(nlist=100)
-            query_params = IVFIdFilterQueryParameters(nprobe=10)
+            query_params = IVFIdFilterQueryParameters(nprobe=20)
     
             print("initializing benchmark")
             runner = BenchmarkRunner(dataset, num_restrictions, IVFIdFilter, build_params, query_params)

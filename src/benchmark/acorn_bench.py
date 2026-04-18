@@ -7,11 +7,16 @@ from src.benchmark.benchmark_helper import runFullBenchmark, generateLogGrid
 import multiprocessing
 
 def bench_sift(nr):
-    ds = siftDataset(subset_size=0.1, neighbors_retrieved=10)
+    ds = siftDataset(subset_size=1.0, neighbors_retrieved=10)
 
     build_params = [AcornBuildParameters(M=32, gamma=24, M_beta=32)]
-    efSearch = generateLogGrid(10, 500, 6)
+    gamma = generateLogGrid(12, 24, 2)
+    efSearch = generateLogGrid(10, 500, 4)
 
+    build_params = [
+        AcornBuildParameters(M=32, gamma=g, M_beta=32)
+        for g in gamma
+    ]
     query_params = [
         AcornQueryParameters(efSearch=ef)
         for ef in efSearch
@@ -20,11 +25,15 @@ def bench_sift(nr):
     runFullBenchmark(ds, nr, Acorn, build_params, query_params)
 
 def bench_glove():
-    ds = GloVeDataset(subset_size=0.1, neighbors_retrieved=10)
+    ds = GloVeDataset(subset_size=1.0, neighbors_retrieved=10)
     
-    build_params = [AcornBuildParameters(M=32, gamma=24, M_beta=32)]
-    efSearch = generateLogGrid(10, 500, 6)
+    gamma = generateLogGrid(12, 24, 2)
+    efSearch = generateLogGrid(10, 500, 4)
 
+    build_params = [
+        AcornBuildParameters(M=32, gamma=g, M_beta=32)
+        for g in gamma
+    ]
     query_params = [
         AcornQueryParameters(efSearch=ef)
         for ef in efSearch
@@ -34,9 +43,13 @@ def bench_glove():
 def bench_yfcc():
     ds = yfccDataset(subset_size=0.1, neighbors_retrieved=10)
         
-    build_params = [AcornBuildParameters(M=32, gamma=24, M_beta=32)]
-    efSearch = generateLogGrid(10, 500, 6)
+    gamma = generateLogGrid(12, 24, 2)
+    efSearch = generateLogGrid(10, 500, 4)
 
+    build_params = [
+        AcornBuildParameters(M=32, gamma=g, M_beta=32)
+        for g in gamma
+    ]
     query_params = [
         AcornQueryParameters(efSearch=ef)
         for ef in efSearch

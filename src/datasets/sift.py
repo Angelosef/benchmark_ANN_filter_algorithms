@@ -2,10 +2,8 @@ from src.datasets.base_dataset import Dataset, Config
 import os
 import numpy as np
 import tarfile
-from src.datasets.utils import (download_file, load_fvecs, plot_selectivity)
+from src.datasets.utils import (download_file, load_fvecs, plot_selectivity, save_gt_isolated)
 import json
-import faiss
-import time
 
 class siftDataset(Dataset):
     def __init__(self, subset_size=1.0, neighbors_retrieved=10):
@@ -14,7 +12,7 @@ class siftDataset(Dataset):
         
         # for the synthetic data:
         self.number_of_attributes = 3
-        self.value_cardinality = 4
+        self.value_cardinality = 6
     
     def get_config(self):
         return Config("structured", "conjunction")
@@ -76,6 +74,8 @@ class siftDataset(Dataset):
             os.makedirs(os.path.join(self.dataset_path, 'queries', 'restriction_'+str(i)), exist_ok=True)
             np.save(os.path.join(self.dataset_path, 'queries', 'restriction_'+str(i), 'filters.npy'), query_filter)
     
+        self.save_global_metadata(base_vecs, query_vecs)
+
     def create_subset(self):
         if not (self.find_subset_path() is None):
             return
@@ -84,16 +84,15 @@ class siftDataset(Dataset):
 
         os.makedirs(subset_path, exist_ok=True)
 
-        base_vecs = np.load(os.path.join(self.dataset_path, 'base', 'vectors.npy'))
-        base_attributes = np.load(os.path.join(self.dataset_path, 'base', 'attributes.npy'))
-        query_vecs = np.load(os.path.join(self.dataset_path, 'queries', 'vectors.npy'))
+        full_base_count = self.get_full_base_count()
+        full_query_count = self.get_full_query_count()
 
-        base_size = int(base_vecs.shape[0] * self.subset_size)
-        query_size = int(query_vecs.shape[0] * self.subset_size)
+        base_size = int(full_base_count * self.subset_size)
+        query_size = int(full_query_count * self.subset_size)
 
-        base_ids = self.rng.choice(np.arange(base_vecs.shape[0]), size=base_size, replace=False)
+        base_ids = self.rng.choice(np.arange(full_base_count), size=base_size, replace=False)
         base_ids.sort()
-        query_ids = self.rng.choice(np.arange(query_vecs.shape[0]), size=query_size, replace=False)
+        query_ids = self.rng.choice(np.arange(full_query_count), size=query_size, replace=False)
         query_ids.sort()
 
         os.makedirs(os.path.join(subset_path, 'base'), exist_ok=True)
@@ -104,8 +103,6 @@ class siftDataset(Dataset):
         metadata = {
             "subset_size": self.subset_size,
             "neighbors_retrieved": self.neighbors_retrieved,
-            "vector_dim": base_vecs.shape[1],
-            "vector_dtype": str(base_vecs.dtype),
             "base_count": len(base_ids),
             "query_count": len(query_ids)
         }
@@ -113,16 +110,10 @@ class siftDataset(Dataset):
         with open(os.path.join(subset_path, 'metadata.json'), 'w') as f:
             json.dump(metadata, f)
 
-        base_vecs = self.get_base_vectors()
-        base_attributes = self.get_base_attributes()
-        query_vecs = self.get_query_vectors()
-        
-        for i in range(1, self.number_of_attributes+1):
-            query_filters = self.get_query_filters(i)
-            gt_ids, gt_dst = self.calculate_ground_truth(base_vecs, base_attributes, query_vecs, query_filters)
-            os.makedirs(os.path.join(subset_path, 'queries', 'restriction_'+str(i)), exist_ok=True)
-            np.save(os.path.join(subset_path, 'queries', 'restriction_'+str(i), 'ground_truth_ids.npy'), gt_ids)
-            np.save(os.path.join(subset_path, 'queries', 'restriction_'+str(i), 'distances.npy'), gt_dst)
+        for num_restr in range(1, self.number_of_attributes+1):
+            gt_dst_path = os.path.join(subset_path, 'queries', 'restriction_'+str(num_restr))
+            gt_ids_path = os.path.join(subset_path, 'queries', 'restriction_'+str(num_restr))
+            save_gt_isolated(self, num_restr, gt_dst_path, gt_ids_path)
         
         return
 

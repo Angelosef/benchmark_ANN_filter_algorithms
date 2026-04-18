@@ -6,10 +6,10 @@ from src.benchmark.benchmark_helper import runFullBenchmark, generateLogGrid
 import multiprocessing
 
 def bench_sift(nr):
-    ds = siftDataset(subset_size=0.1, neighbors_retrieved=10)
+    ds = siftDataset(subset_size=1.0, neighbors_retrieved=10)
 
     initial_k = generateLogGrid(50, 1000, 3)
-    efSearch = generateLogGrid(10, 100, 3)
+    efSearch = generateLogGrid(10, 200, 3)
 
     build_params = [HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)]
     query_params = [
@@ -21,12 +21,10 @@ def bench_sift(nr):
     runFullBenchmark(ds, nr, HNSWPostfilter, build_params, query_params)
 
 def bench_glove():
-    ds = GloVeDataset(subset_size=0.1, neighbors_retrieved=10)
+    ds = GloVeDataset(subset_size=1.0, neighbors_retrieved=10)
 
     initial_k = generateLogGrid(50, 1000, 3)
-    efSearch = generateLogGrid(10, 100, 3)
-    print("initial_k: ", initial_k)
-    print("efSearch: ", efSearch)
+    efSearch = generateLogGrid(10, 200, 3)
 
     build_params = [HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)]
     query_params = [
@@ -41,7 +39,7 @@ def bench_yfcc():
     ds = yfccDataset(subset_size=0.1, neighbors_retrieved=10)
 
     initial_k = generateLogGrid(50, 1000, 3)
-    efSearch = generateLogGrid(10, 100, 3)
+    efSearch = generateLogGrid(10, 200, 3)
 
     build_params = [HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)]
     query_params = [

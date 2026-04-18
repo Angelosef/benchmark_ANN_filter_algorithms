@@ -25,16 +25,15 @@ def _benchmark_worker(dataset, ds_query_param, algo_class, b_params, q_params):
 def runFullBenchmark(dataset, ds_query_param, algo_class, build_params_list, query_params_list):
     for b_params in build_params_list:
         for q_params in query_params_list:
-            # Create a Process for this specific run
+            
             p = multiprocessing.Process(
                 target=_benchmark_worker,
                 args=(dataset, ds_query_param, algo_class, b_params, q_params)
             )
             
             p.start()
-            p.join()  # Wait for the process to finish before starting the next one
+            p.join()
             
-            # Optional: trigger Python's GC in the main process just in case
             gc.collect()
 
 def generateLogGrid(start, end, num_samples):

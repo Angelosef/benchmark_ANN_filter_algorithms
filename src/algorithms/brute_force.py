@@ -45,13 +45,27 @@ def query_structured_conjunction(self, vectors, filters, k, parameters):
         # current_filter is a 1D array: [dim_val_0, dim_val_1, ...]
         current_filter = filters[q_idx]
         valid_ids = self.attribute_index.get_valid_ids_conj(current_filter)
-        
-        params = faiss.SearchParameters() 
-        params.sel = faiss.IDSelectorBatch(len(valid_ids), faiss.swig_ptr(valid_ids))
 
-        dist, indices = self.index.search(q_vec.reshape(1, -1), k, params=params)
+        valid_ids = np.ascontiguousarray(valid_ids, dtype=np.int64)
+
+        sel = faiss.IDSelectorBatch(
+            len(valid_ids),
+            faiss.swig_ptr(valid_ids)
+        )
+
+        params = faiss.SearchParameters(sel=sel)
+
+        dist, indices = self.index.search(
+            q_vec.reshape(1, -1),
+            k,
+            params=params
+        )
         D[q_idx] = dist[0]
         I[q_idx] = indices[0]
+
+        params.sel = None
+        del params
+        del sel
 
     return D, I
 
@@ -64,12 +78,25 @@ def query_structured_CNF(self, vectors, filters, k, parameters):
         current_filter = filters[q_idx]
         valid_ids = self.attribute_index.get_valid_ids_cnf(current_filter)
 
-        params = faiss.SearchParameters() 
-        params.sel = faiss.IDSelectorBatch(len(valid_ids), faiss.swig_ptr(valid_ids))
+        sel = faiss.IDSelectorBatch(
+            len(valid_ids),
+            faiss.swig_ptr(valid_ids)
+        )
 
-        dist, indices = self.index.search(q_vec.reshape(1, -1), k, params=params)
+        params = faiss.SearchParameters(sel=sel)
+
+        dist, indices = self.index.search(
+            q_vec.reshape(1, -1),
+            k,
+            params=params
+        )
         D[q_idx] = dist[0]
         I[q_idx] = indices[0]
+
+        params.sel = None
+        del params
+        del sel
+
 
     return D, I
 
@@ -100,14 +127,26 @@ def query_sparse_conjunction(self, vectors, filters, k, parameters):
 
         if valid_ids_set is not None and not valid_ids_set: continue
 
-        params = faiss.SearchParameters()
-        if valid_ids_set is not None:
-            id_array = np.array(list(valid_ids_set), dtype='int64')
-            params.sel = faiss.IDSelectorBatch(len(id_array), faiss.swig_ptr(id_array))
+        valid_ids = np.array(list(valid_ids_set), dtype='int64')
 
-        dist, indices = self.index.search(q_vec.reshape(1, -1), k, params=params)
+        sel = faiss.IDSelectorBatch(
+            len(valid_ids),
+            faiss.swig_ptr(valid_ids)
+        )
+
+        params = faiss.SearchParameters(sel=sel)
+
+        dist, indices = self.index.search(
+            q_vec.reshape(1, -1),
+            k,
+            params=params
+        )
         D[q_idx] = dist[0]
         I[q_idx] = indices[0]
+
+        params.sel = None
+        del params
+        del sel
 
     return D, I
 

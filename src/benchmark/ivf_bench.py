@@ -7,7 +7,7 @@ from src.benchmark.benchmark_helper import runFullBenchmark, generateLogGrid
 import multiprocessing
 
 def bench_sift(nr):
-    ds = siftDataset(subset_size=0.1, neighbors_retrieved=10)
+    ds = siftDataset(subset_size=1.0, neighbors_retrieved=10)
     nlist = generateLogGrid(200, 300, 2)
     nprobe = generateLogGrid(10, 100, 4)
 
@@ -23,7 +23,7 @@ def bench_sift(nr):
     runFullBenchmark(ds, nr, IVFIdFilter, build_params, query_params)
 
 def bench_glove():
-    ds = GloVeDataset(subset_size=0.1, neighbors_retrieved=10)
+    ds = GloVeDataset(subset_size=1.0, neighbors_retrieved=10)
         
     nlist = generateLogGrid(200, 300, 2)
     nprobe = generateLogGrid(10, 100, 4)
@@ -55,9 +55,9 @@ def bench_yfcc():
     runFullBenchmark(ds, None, IVFIdFilter, build_params, query_params)
 
 if __name__=="__main__":
-    test_sift = False
+    test_sift = True
     test_glove = True
-    test_yfcc = False
+    test_yfcc = True
 
     if test_sift:
         
