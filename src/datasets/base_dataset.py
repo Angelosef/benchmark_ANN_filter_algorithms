@@ -46,6 +46,9 @@ class Dataset:
     
     def get_base_vectors(self):
         raise NotImplementedError
+    
+    def get_base_attributes(self):
+        raise NotImplementedError
 
     def get_query_vectors(self):
         raise NotImplementedError

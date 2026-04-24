@@ -1,6 +1,7 @@
 from src.datasets.sift import siftDataset
 from src.datasets.glove import GloVeDataset
 from src.datasets.yfcc import yfccDataset
+from src.datasets.gist import gistDataset
 from src.algorithms.ivf_id_filter import IVFIdFilter, IVFIdFilterBuildParameters, IVFIdFilterQueryParameters
 
 from src.benchmark.benchmark_helper import runFullBenchmark, generateLogGrid
@@ -54,10 +55,29 @@ def bench_yfcc():
     ]
     runFullBenchmark(ds, None, IVFIdFilter, build_params, query_params)
 
+
+def bench_gist():
+    ds = gistDataset(subset_size=1.0, neighbors_retrieved=10)
+        
+    nlist = generateLogGrid(200, 300, 2)
+    nprobe = generateLogGrid(5, 100, 4)
+
+    build_params = [
+        IVFIdFilterBuildParameters(nlist=nl)
+        for nl in nlist
+    ]
+    query_params = [
+        IVFIdFilterQueryParameters(nprobe=np)
+        for np in nprobe
+    ]
+    runFullBenchmark(ds, None, IVFIdFilter, build_params, query_params)
+
+
 if __name__=="__main__":
-    test_sift = True
-    test_glove = True
-    test_yfcc = True
+    test_sift = False
+    test_glove = False
+    test_yfcc = False
+    test_gist = True
 
     if test_sift:
         
@@ -85,3 +105,13 @@ if __name__=="__main__":
         
         p.start()
         p.join()
+    
+    if test_gist:
+        p = multiprocessing.Process(
+            target=bench_gist
+        )
+        
+        p.start()
+        p.join()
+    
+

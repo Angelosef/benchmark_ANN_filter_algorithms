@@ -1,13 +1,15 @@
 from src.datasets.sift import siftDataset
 from src.datasets.glove import GloVeDataset
 from src.datasets.yfcc import yfccDataset
+from src.datasets.gist import gistDataset
 
 import numpy as np
 
 if __name__ == '__main__':
-    test_sift = True
-    test_glove = True
-    test_yfcc = True
+    test_sift = False
+    test_glove = False
+    test_yfcc = False
+    test_gist = True
     
     if test_sift:
         # --- SIFT ---
@@ -83,4 +85,31 @@ if __name__ == '__main__':
         dataset.plot_tag_popularity(relative_counts=True)
         dataset.plot_query_tag_popularity(relative_counts=False)
         dataset.plot_query_tag_popularity(relative_counts=True)
+    
+    if test_gist:
+        # --- gist ---
+        dataset = gistDataset(subset_size=1.0)
+        dataset.prepare()
+        
+        dataset.inspect_data(
+            dataset.get_base_vectors(), 
+            dataset.get_base_attributes(), 
+            dataset.get_query_vectors(), 
+            dataset.get_query_filters()
+        )
+        gt_ids = dataset.get_ground_truth_ids()
+        print("gt_shape: ", gt_ids.shape)
+        
+        counts = dataset.calculate_selectivity()
+
+        tag_counts = dataset.calculate_tag_counts()
+        dataset.calculate_query_tag_counts()
+
+        dataset.plot_selectivity(relative_counts=False)
+        dataset.plot_selectivity(relative_counts=True)
+        dataset.plot_tag_popularity(relative_counts=False)
+        dataset.plot_tag_popularity(relative_counts=True)
+        dataset.plot_query_tag_popularity(relative_counts=False)
+        dataset.plot_query_tag_popularity(relative_counts=True)
+        
         

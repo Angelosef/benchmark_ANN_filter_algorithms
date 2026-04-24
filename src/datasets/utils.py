@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from src.benchmark.benchmarkRunner import BenchmarkRunner
 from src.algorithms.brute_force import BruteForceIdFilter
 import multiprocessing
+from scipy import sparse
 
 def download_file(url, dst_path, overwrite=False):
     if os.path.exists(dst_path) and not overwrite:
@@ -92,7 +93,6 @@ def load_vectors_from_u8bin(filename):
 
 def load_metadata(filename):
     """
-    Reads the YFCC metadata using the official competition format:
     Header: 3 x int64 (rows, cols, non-zero-elements)
     Pointers: (rows + 1) x int64
     Indices: nnz x int32
@@ -217,3 +217,74 @@ def save_gt_isolated(dataset, ds_query_param, gt_dst_path, gt_ids_path):
             
     p.start()
     p.join()
+
+
+def generate_zipfian_tags(n_rows, n_cols, a=1.2, max_prop=0.5):
+    """
+    Generates a sparse matrix where tag occurrences are independent Binomial trials
+    with probabilities following a Zipfian distribution.
+    """
+    ranks = np.arange(1, n_cols + 1)
+    weights = 1.0 / (ranks ** a)
+    probs = weights * (max_prop / weights[0])
+    
+    counts = np.random.binomial(n_rows, probs)
+    
+    all_rows = []
+    all_cols = []
+    
+    for col_idx, count in enumerate(counts):
+        if count > 0:
+            selected_rows = np.random.choice(n_rows, size=count, replace=False)
+            
+            all_rows.append(selected_rows)
+            all_cols.append(np.full(count, col_idx))
+    
+    row_indices = np.concatenate(all_rows)
+    col_indices = np.concatenate(all_cols)
+    data = np.ones(len(row_indices), dtype=np.int8)
+    
+    return sparse.csr_matrix((data, (row_indices, col_indices)), shape=(n_rows, n_cols))
+
+def generate_zipfian_fixed_tags(n_rows, n_cols, a=1.1, p_two_tags=0.5):
+    """
+    Generates a sparse matrix where tag popularity is Zipfian,
+    but each row is strictly constrained to have either 1 or 2 tags.
+    
+    Args:
+        n_rows (int): Number of rows.
+        n_cols (int): Number of potential tags.
+        a (float): Zipf parameter (higher = more skewed).
+        p_two_tags (float): Probability (0 to 1) that a row has 2 tags instead of 1.
+    """
+    ranks = np.arange(1, n_cols + 1)
+    weights = 1.0 / (ranks ** a)
+    pmf = weights / weights.sum()
+    
+    n_tags_per_row = np.random.choice([1, 2], size=n_rows, p=[1 - p_two_tags, p_two_tags])
+    
+    tag1 = np.random.choice(n_cols, size=n_rows, p=pmf)
+    
+    mask_two = (n_tags_per_row == 2)
+    n_two = mask_two.sum()
+    
+    tag2 = np.full(n_rows, -1) # Placeholder array
+    
+    if n_two > 0:
+        sampled_tag2 = np.random.choice(n_cols, size=n_two, p=pmf)
+        
+        collisions = (sampled_tag2 == tag1[mask_two])
+        while collisions.any():
+            sampled_tag2[collisions] = np.random.choice(n_cols, size=collisions.sum(), p=pmf)
+            collisions = (sampled_tag2 == tag1[mask_two])
+            
+        tag2[mask_two] = sampled_tag2
+
+    rows_with_two = np.where(mask_two)[0]
+    
+    row_indices = np.concatenate([np.arange(n_rows), rows_with_two])
+    col_indices = np.concatenate([tag1, tag2[mask_two]])
+    
+    data = np.ones(len(row_indices), dtype=np.int8)
+    
+    return sparse.csr_matrix((data, (row_indices, col_indices)), shape=(n_rows, n_cols))

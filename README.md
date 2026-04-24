@@ -12,9 +12,9 @@ The framework supports various constraint types, ranging from simple attribute m
 ### Performance Metrics
 Algorithms are evaluated based on the following four pillars:
 * **Recall@k**: The fraction of the true $k$ ground-truth nearest neighbors retrieved by the approximate search.
-* **Query Latency**: The average execution time per query (measured in milliseconds).
-* **Index Construction Time**: The wall-clock time required to build the searchable index.
-* **Memory Footprint**: The RAM utilization of the index structure in bytes/GB.
+* **Query Latency**: The total execution time to answer queries (measured in seconds).
+* **Index Construction Time**: he total execution time required to build the searchable index.
+* **Memory Footprint**: The RAM utilization of the index structure in GB.
 
 ---
 
@@ -24,10 +24,10 @@ Algorithms are evaluated based on the following four pillars:
 Clone the repository and initialize the Python environment using the provided Conda configuration:
 
 ```bash
-git clone [https://github.com/Angelosef/benchmark_ANN_filter_algorithms.git](https://github.com/Angelosef/benchmark_ANN_filter_algorithms.git)
+git clone https://github.com/Angelosef/benchmark_ANN_filter_algorithms.git
 cd benchmark_ANN_filter_algorithms
 conda env create -f environment.yml
-conda activate [ann_bench]
+conda activate ann_bench
 ````
 
 ### 2\. External Dependencies
@@ -35,7 +35,7 @@ conda activate [ann_bench]
 This benchmark utilizes specialized C++ implementations. You must follow the build instructions within the respective submodules to compile the source code:
 
   * **ACORN**: High-performance filtered HNSW.
-  * **ParlayANN (IVF-Squared)**: Parallelized inverted file structures.
+  * **IVF-Squared**: Inverted file structures pointing at vamana-indices.
 
 -----
 
@@ -60,19 +60,20 @@ We compare state-of-the-art filtered search techniques against standard baseline
 2.  **Faiss IVF (In-filtering)**: Inverted File Index with filtering applied during list scanning.
 3.  **Faiss HNSW (Post-filtering)**: Hierarchical Navigable Small Worlds with subsequent filter application.
 4.  **ACORN**: An extension of HNSW designed specifically for predicate-based search.
-5.  **IVF-Squared**: An optimized IVF variant from the ParlayANN suite.
+5.  **IVF-Squared**: An optimized index for ANNS with tag filtering with AND constraints on 1-2 tags.
 
 -----
 
 ## Datasets
 
-The framework utilizes three primary datasets, summarized below:
+The framework utilizes four primary datasets, summarized below:
 
-| Dataset | Dimensions | Base Size | Type | Filter Logic |
-| :--- | :---: | :---: | :---: | :--- |
-| **SIFT** | 128 | 1M | `float32` | Synthetic structured attributes (AND logic). |
-| **GloVe** | 300 | 396k | `float32` | CNF constraints (ANDs of ORs). |
-| **YFCC** | 192 | 1M (subset) | `float32` | semi structured attributes (tags) (AND logic) |
+| Dataset | Dimensions | Base Size | Query Size | Vector Type | Attribute Type | Filter Logic | 
+| :--- | :---: | :---: | :---: | :--- | :--- | :--- |
+| **SIFT** | 128 | 1M | 10k | `float32` | Synthetic structured attributes | AND logic on 1, 2, 3 of the attribute columns |
+| **GloVe** | 300 | 396k | 4k | `float32` | Synthetic structured attributes | CNF constraints (ANDs of ORs) |
+| **YFCC** | 192 | 1M (subset) | 10k | `float32` | semi structured attributes (tags) | AND logic on tags |
+| **GIST** | 960 | 1M | 1k | `float32` | synthetic semi structured attributes (tags) | AND logic on tags |
 
 -----
 
@@ -119,15 +120,15 @@ The build time + index memory plots
 
 -----
 
-## Known Limitations
+## Computing Setup
 
-  * **Hardware Constraints**: Benchmarking was performed on a consumer-grade setup (6-core CPU, 16GB RAM) via WSL2/Windows.
-  * **Memory Scaling**: Due to RAM limitations, datasets were restricted to 1M vectors. Performance characteristics may evolve on high-memory server environments or at larger scales (10M+).
-
+  * **Hardware Constraints**: Benchmarking was performed on a consumer-grade setup
+  (CPU: intel core i5 - 2.9GHz - 6 cores, 16GB RAM) via WSL2/Windows10.
+  
 -----
 
 ## References & Acknowledgments
 
   * **ACORN**: [Paper (ACM)](https://dl.acm.org/doi/10.1145/3654923) | [Source Code](https://github.com/guestrin-lab/ACORN.git)
   * **IVF-Squared/ParlayANN**: [Paper (OpenReview)](https://openreview.net/pdf/8213f79ab3761a0647dbcfea17c73677712ea59c.pdf) | [Source Code](https://github.com/cmuparlay/ParlayANN.git)
-  * **Datasets**: Acknowledgement to the maintainers of the SIFT, GloVe, and YFCC datasets for providing standard vectors for the ANN community.
+  * **Datasets**: Acknowledgement to the maintainers of the SIFT, GIST, GloVe, and YFCC datasets for providing standard vectors for the ANN community.
