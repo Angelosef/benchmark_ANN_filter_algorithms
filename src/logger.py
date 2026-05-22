@@ -7,6 +7,7 @@ from src.datasets.base_dataset import Dataset
 from src.datasets.sift import siftDataset
 from src.datasets.glove import GloVeDataset
 from src.datasets.yfcc import yfccDataset
+from src.datasets.gist import gistDataset
 
 
 class BenchmarkLogger:
@@ -14,6 +15,9 @@ class BenchmarkLogger:
         self.base_log_dir = base_log_dir
         os.makedirs(self.base_log_dir, exist_ok=True)
         self.master_log_path = os.path.join(self.base_log_dir, "master_registry.csv")
+    
+    def get_log_dir(self):
+        return self.base_log_dir
 
     def log_benchmark(self, runner_results, D, I):
         timestamp = time.strftime("%Y%m%d-%H%M%S")
@@ -66,15 +70,25 @@ class BenchmarkLogger:
         ds_class = Dataset.get_dataset_class(ds_name)
         dataset = ds_class(subset_size, k)
         gt_ids = dataset.get_ground_truth_ids(ds_query_param)
-        recall = calculate_recall(I, gt_ids, k)
+        recalls = calculate_recalls(I, gt_ids, k)
 
-        metadata["recall"] = recall
+        avg_recall = np.mean(recalls)
+        metadata["avg_recall"] = avg_recall
+        metadata["p2_recall"] = np.percentile(recalls, 2)
+        metadata["p5_recall"] = np.percentile(recalls, 5)
+        metadata["p50_recall"] = np.percentile(recalls, 50)
+        metadata["p95_recall"] = np.percentile(recalls, 95)
+        metadata["p95_recall"] = np.percentile(recalls, 95)
+        metadata["p98_recall"] = np.percentile(recalls, 98)
+
+        np.save(os.path.join(run_dir, "recalls.npy"), recalls)
+        
         with open(os.path.join(run_dir, "metadata.json"), "w") as f:
             json.dump(metadata, f, indent=4)
         
-        return recall
+        return avg_recall
 
-def calculate_recall(I, gt_ids, k):
+def calculate_avg_recall(I, gt_ids, k):
     """
     I: [num_queries, k_retrieved]
     gt_ids: [num_queries, k_ground_truth]
@@ -87,6 +101,21 @@ def calculate_recall(I, gt_ids, k):
         count += np.isin(retrieved[i], truth[i]).sum()
         
     return count / (len(I) * k)
+
+def calculate_recalls(I, gt_ids, k):
+    """
+    I: [num_queries, k_retrieved]
+    gt_ids: [num_queries, k_ground_truth]
+    """
+    recalls = np.zeros(len(I))
+    retrieved = I[:, :k]
+    truth = gt_ids[:, :k]
+    
+    for i in range(len(I)):
+        recalls[i] = np.isin(retrieved[i], truth[i]).sum()
+    recalls = recalls / k
+        
+    return recalls
     
 def find_benchmarks(dataset_name=None, index_name=None):
     df = pd.read_csv("logs/master_registry.csv")

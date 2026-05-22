@@ -3,6 +3,8 @@ import numpy as np
 from src.algorithms.baseIndex import BaseANNIndex
 from src.algorithms.utils import AttributeIndex, BitsetAttributeIndex
 from src.algorithms.utils import HybridBloomEncoder, TagAssigner, TagEncoder
+from concurrent.futures import ThreadPoolExecutor
+import os
 
 class BruteForceIdFilter(BaseANNIndex):
     def __init__(self, dim, metric):
@@ -41,31 +43,40 @@ def query_structured_conjunction(self, vectors, filters, k, parameters):
     D = np.full((len(vectors), k), np.inf, dtype='float32')
     I = np.full((len(vectors), k), -1, dtype='int64')
 
-    for q_idx, q_vec in enumerate(vectors):
-        # current_filter is a 1D array: [dim_val_0, dim_val_1, ...]
+    def search_single(q_idx):
+        q_vec = vectors[q_idx]
         current_filter = filters[q_idx]
         valid_ids = self.attribute_index.get_valid_ids_conj(current_filter)
-
-        valid_ids = np.ascontiguousarray(valid_ids, dtype=np.int64)
-
         sel = faiss.IDSelectorBatch(
             len(valid_ids),
             faiss.swig_ptr(valid_ids)
         )
 
-        params = faiss.SearchParameters(sel=sel)
+        params = faiss.SearchParametersIVF(sel=sel)
 
         dist, indices = self.index.search(
             q_vec.reshape(1, -1),
             k,
             params=params
         )
-        D[q_idx] = dist[0]
-        I[q_idx] = indices[0]
 
         params.sel = None
         del params
         del sel
+
+        return q_idx, dist[0], indices[0]
+
+    num_threads = os.cpu_count() or 1
+    faiss.omp_set_num_threads(1)
+
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        results = executor.map(search_single, range(len(vectors)))
+
+    faiss.omp_set_num_threads(num_threads)
+
+    for q_idx, dist, indices in results:
+        D[q_idx] = dist
+        I[q_idx] = indices
 
     return D, I
 
@@ -74,29 +85,41 @@ def query_structured_CNF(self, vectors, filters, k, parameters):
     D = np.full((len(vectors), k), np.inf, dtype='float32')
     I = np.full((len(vectors), k), -1, dtype='int64')
 
-    for q_idx, q_vec in enumerate(vectors):
+
+    def search_single(q_idx):
+        q_vec = vectors[q_idx]
         current_filter = filters[q_idx]
         valid_ids = self.attribute_index.get_valid_ids_cnf(current_filter)
-
         sel = faiss.IDSelectorBatch(
             len(valid_ids),
             faiss.swig_ptr(valid_ids)
         )
 
-        params = faiss.SearchParameters(sel=sel)
+        params = faiss.SearchParametersIVF(sel=sel)
 
         dist, indices = self.index.search(
             q_vec.reshape(1, -1),
             k,
             params=params
         )
-        D[q_idx] = dist[0]
-        I[q_idx] = indices[0]
 
         params.sel = None
         del params
         del sel
 
+        return q_idx, dist[0], indices[0]
+
+    num_threads = os.cpu_count() or 1
+    faiss.omp_set_num_threads(1)
+
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        results = executor.map(search_single, range(len(vectors)))
+
+    faiss.omp_set_num_threads(num_threads)
+
+    for q_idx, dist, indices in results:
+        D[q_idx] = dist
+        I[q_idx] = indices
 
     return D, I
 
@@ -105,7 +128,8 @@ def query_sparse_conjunction(self, vectors, filters, k, parameters):
     D = np.full((len(vectors), k), np.inf, dtype='float32')
     I = np.full((len(vectors), k), -1, dtype='int64')
 
-    for q_idx, q_vec in enumerate(vectors):
+    def search_single(q_idx):
+        q_vec = vectors[q_idx]
         f_start = filters.indptr[q_idx]
         f_end = filters.indptr[q_idx+1]
         required_tags = filters.indices[f_start:f_end]
@@ -123,30 +147,46 @@ def query_sparse_conjunction(self, vectors, filters, k, parameters):
                     valid_ids_set = set(doc_ids_with_tag)
                 else:
                     valid_ids_set.intersection_update(doc_ids_with_tag)
-                if not valid_ids_set: break
+                
+                if not valid_ids_set:
+                    break
 
-        if valid_ids_set is not None and not valid_ids_set: continue
-
+        if valid_ids_set is not None and not valid_ids_set:
+            return q_idx, np.full(k, np.inf, dtype='float32'), np.full(k, -1, dtype='int64')
+        
         valid_ids = np.array(list(valid_ids_set), dtype='int64')
+        params = faiss.SearchParametersIVF()
 
         sel = faiss.IDSelectorBatch(
             len(valid_ids),
             faiss.swig_ptr(valid_ids)
         )
 
-        params = faiss.SearchParameters(sel=sel)
-
+        params = faiss.SearchParametersIVF(sel=sel)
+        
         dist, indices = self.index.search(
             q_vec.reshape(1, -1),
             k,
             params=params
         )
-        D[q_idx] = dist[0]
-        I[q_idx] = indices[0]
-
+        
         params.sel = None
         del params
         del sel
+
+        return q_idx, dist[0], indices[0]
+
+    num_threads = os.cpu_count() or 1
+    faiss.omp_set_num_threads(1)
+
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        results = executor.map(search_single, range(len(vectors)))
+
+    faiss.omp_set_num_threads(num_threads)
+
+    for q_idx, dist, indices in results:
+        D[q_idx] = dist
+        I[q_idx] = indices
 
     return D, I
 

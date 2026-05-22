@@ -12,9 +12,9 @@ class dummy:
 
 if __name__=="__main__":
     test_sift = False
-    test_glove = False
+    test_glove = True
     test_yfcc = False
-    test_gist = True
+    test_gist = False
 
     if test_sift:
         print("running brute force on sift dataset")
@@ -39,7 +39,7 @@ if __name__=="__main__":
     if test_glove:
             print("running brute force on glove dataset")
         
-            subset_size = 0.1
+            subset_size = 1.0
             k = 10
         
             dataset = GloVeDataset(subset_size, k)
