@@ -203,7 +203,7 @@ class dummy:
 
 def save_ground_truth(dataset, ds_query_param, gt_dst_path, gt_ids_path):
     br = BenchmarkRunner(dataset, ds_query_param, BruteForceIdFilter, dummy(), dummy())
-    D, I, metadata = br.run()
+    D, I, L, metadata = br.run()
     os.makedirs(gt_ids_path, exist_ok=True)
     os.makedirs(gt_dst_path, exist_ok=True)
     np.save(os.path.join(gt_ids_path, 'ground_truth_ids.npy'), I)

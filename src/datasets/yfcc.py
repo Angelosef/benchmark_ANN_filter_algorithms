@@ -236,4 +236,11 @@ class yfccDataset(Dataset):
         gt_ids = np.load(os.path.join(subset_path, 'queries', 'ground_truth_ids.npy'))
         
         return gt_ids
+    
+    def get_selectivity_path(self, query_type=None):
+        subset_path = self.get_subset_path_or_fail()
+        path = os.path.join(subset_path, 'analysis', 'selectivity.npy')
+        
+        return path
+
 

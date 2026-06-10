@@ -89,26 +89,22 @@ def build_sparse_ivf_squared(self, vectors, attributes, parameters):
     
     return
 
-@IVFSquared.register_query("sparse", "conjunction")
-def query_sparse_ivf_squared(self, vectors, filters, k, parameters):
+@IVFSquared.register_init_query("sparse", "conjunction")
+def init_query_sparse_ivf_squared(self, vectors, filters, k, parameters):
     self.query_parametrs = parameters
     self.index.set_target_points(parameters.target_points)
     self.index.set_tiny_cutoff(parameters.tiny_cutoff)    
-    # create filters
-    num_q = vectors.shape[0]
-    query_filters = []
-    for q_idx in range(num_q):
-        f_start = filters.indptr[q_idx]
-        f_end = filters.indptr[q_idx+1]
-        required_tags = filters.indices[f_start:f_end]
-        if len(required_tags) == 1:
-            q_filter = wp.QueryFilter(required_tags[0])
-        elif len(required_tags) == 2:
-            q_filter = wp.QueryFilter(required_tags[0], required_tags[1])
-        else:
-            raise ValueError(f"Query at index {q_idx} has {len(required_tags)} tags. ParlayANN supports 1 or 2.")
-        query_filters.append(q_filter)
     
-    neighbors, distances = self.index.batch_filter_search(vectors, query_filters, num_q, k)
+@IVFSquared.register_query("sparse", "conjunction")
+def query_sparse_ivf_squared(self, vector, filter, k):
+    required_tags = filter.indices
+    if len(required_tags) == 1:
+        q_filter = wp.QueryFilter(required_tags[0])
+    elif len(required_tags) == 2:
+        q_filter = wp.QueryFilter(required_tags[0], required_tags[1])
+    else:
+        raise ValueError(f"Query  has {len(required_tags)} tags. ParlayANN supports 1 or 2.")
     
-    return distances, neighbors
+    neighbors, distances = self.index.batch_filter_search(vector.reshape(1, -1), [q_filter], 1, k)
+    
+    return distances[0], neighbors[0]

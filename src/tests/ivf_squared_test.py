@@ -6,7 +6,7 @@ from src.algorithms.ivf_squared import IVFSquared, IVFSquaredBuildParameters, IV
 from src.logger import BenchmarkLogger
 
 if __name__=="__main__":
-    test_yfcc = False
+    test_yfcc = True
     test_gist = True
 
     if test_yfcc:
@@ -22,11 +22,11 @@ if __name__=="__main__":
         query_params = IVFSquaredQueryParameters()
         runner = BenchmarkRunner(dataset, None, IVFSquared, build_params, query_params)
         print("running benchmark")
-        D, I, metadata = runner.run()
+        D, I, L, metadata = runner.run()
 
         print("logging results")
         logger = BenchmarkLogger()
-        run_path = logger.log_benchmark(metadata, D, I)
+        run_path = logger.log_benchmark(metadata, D, I, L)
         recall = logger.log_recall(run_path)
 
         print("recall = ", recall)
@@ -44,11 +44,11 @@ if __name__=="__main__":
         query_params = IVFSquaredQueryParameters()
         runner = BenchmarkRunner(dataset, None, IVFSquared, build_params, query_params)
         print("running benchmark")
-        D, I, metadata = runner.run()
+        D, I, L, metadata = runner.run()
 
         print("logging results")
         logger = BenchmarkLogger()
-        run_path = logger.log_benchmark(metadata, D, I)
+        run_path = logger.log_benchmark(metadata, D, I, L)
         recall = logger.log_recall(run_path)
 
         print("recall = ", recall)

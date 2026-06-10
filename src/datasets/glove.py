@@ -215,3 +215,10 @@ class GloVeDataset(Dataset):
                 )
                 
         return filters
+    
+    def get_selectivity_path(self, query_type=None):
+        subset_path = self.get_subset_path_or_fail()
+        path = os.path.join(subset_path, 'analysis', 'selectivity.npy')
+        
+        return path
+

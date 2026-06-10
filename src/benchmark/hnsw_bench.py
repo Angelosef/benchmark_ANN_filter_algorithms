@@ -70,8 +70,8 @@ def bench_gist():
 if __name__=="__main__":
     test_sift = False
     test_glove = False
-    test_yfcc = False
-    test_gist = True
+    test_yfcc = True
+    test_gist = False
 
     if test_sift:
         for nr in range(1, 4):

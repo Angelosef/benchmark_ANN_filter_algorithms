@@ -26,11 +26,11 @@ if __name__=="__main__":
             print("initializing benchmark")
             runner = BenchmarkRunner(dataset, num_restrictions, Acorn, build_params, query_params)
             print("running benchmark")
-            D, I, metadata = runner.run()
+            D, I, L, metadata = runner.run()
 
             print("logging results")
             logger = BenchmarkLogger()
-            run_path = logger.log_benchmark(metadata, D, I)
+            run_path = logger.log_benchmark(metadata, D, I, L)
             recall = logger.log_recall(run_path)
             print("recall = ", recall)
 
@@ -46,11 +46,11 @@ if __name__=="__main__":
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, Acorn, build_params, query_params)
         print("running benchmark")
-        D, I, metadata = runner.run()
+        D, I, L, metadata = runner.run()
 
         print("logging results")
         logger = BenchmarkLogger()
-        run_path = logger.log_benchmark(metadata, D, I)
+        run_path = logger.log_benchmark(metadata, D, I, L)
         recall = logger.log_recall(run_path)
         print("recall = ", recall)
         
@@ -67,10 +67,10 @@ if __name__=="__main__":
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, Acorn, build_params, query_params)
         print("running benchmark")
-        D, I, metadata = runner.run()
+        D, I, L, metadata = runner.run()
 
         print("logging results")
         logger = BenchmarkLogger()
-        run_path = logger.log_benchmark(metadata, D, I)
+        run_path = logger.log_benchmark(metadata, D, I, L)
         recall = logger.log_recall(run_path)
         print("recall = ", recall)

@@ -7,9 +7,9 @@ from src.algorithms.hnsw_postfilter import HNSWPostfilter, HNSWPostfilterBuildPa
 from src.logger import BenchmarkLogger
 
 if __name__=="__main__":
-    test_sift = False
-    test_glove = False
-    test_yfcc = False
+    test_sift = True
+    test_glove = True
+    test_yfcc = True
     test_gist = True
 
     if test_sift:
@@ -27,11 +27,11 @@ if __name__=="__main__":
             print("initializing benchmark")
             runner = BenchmarkRunner(dataset, num_restrictions, HNSWPostfilter, build_params, query_params)
             print("running benchmark")
-            D, I, metadata = runner.run()
+            D, I, L, metadata = runner.run()
 
             print("logging results")
             logger = BenchmarkLogger()
-            run_path = logger.log_benchmark(metadata, D, I)
+            run_path = logger.log_benchmark(metadata, D, I, L)
             recall = logger.log_recall(run_path)
             print("recall = ", recall)
 
@@ -47,11 +47,11 @@ if __name__=="__main__":
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, HNSWPostfilter, build_params, query_params)
         print("running benchmark")
-        D, I, metadata = runner.run()
+        D, I, L, metadata = runner.run()
 
         print("logging results")
         logger = BenchmarkLogger()
-        run_path = logger.log_benchmark(metadata, D, I)
+        run_path = logger.log_benchmark(metadata, D, I, L)
         recall = logger.log_recall(run_path)
         print("recall = ", recall)
 
@@ -66,11 +66,11 @@ if __name__=="__main__":
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, HNSWPostfilter, build_params, query_params)
         print("running benchmark")
-        D, I, metadata = runner.run()
+        D, I, L, metadata = runner.run()
 
         print("logging results")
         logger = BenchmarkLogger()
-        run_path = logger.log_benchmark(metadata, D, I)
+        run_path = logger.log_benchmark(metadata, D, I, L)
         recall = logger.log_recall(run_path)
         print("recall = ", recall)
     
@@ -85,10 +85,10 @@ if __name__=="__main__":
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, HNSWPostfilter, build_params, query_params)
         print("running benchmark")
-        D, I, metadata = runner.run()
+        D, I, L, metadata = runner.run()
 
         print("logging results")
         logger = BenchmarkLogger()
-        run_path = logger.log_benchmark(metadata, D, I)
+        run_path = logger.log_benchmark(metadata, D, I, L)
         recall = logger.log_recall(run_path)
         print("recall = ", recall)

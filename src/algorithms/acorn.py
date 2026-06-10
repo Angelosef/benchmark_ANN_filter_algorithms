@@ -29,7 +29,6 @@ def build_structured(self, vectors, attributes, parameters):
     self.base_vectors = vectors
     self.attribute_index = AttributeIndex(attributes)
     self.build_params = parameters
-    self.batch_size = 64
     self.index = IndexACORNFlat(
         self.dim,
         self.build_params.M,
@@ -40,62 +39,45 @@ def build_structured(self, vectors, attributes, parameters):
     self.index.add(vectors)
 
 # --- QUERY STRATEGIES ---
-@Acorn.register_query("structured", "conjunction")
-def query_structured_conjunction(self, vectors, filters, k, parameters):
+@Acorn.register_init_query("structured", "conjunction")
+def init_query_structured_conjunction(self, vectors, filters, k, parameters):
     self.query_params = parameters
-    nq = len(vectors)
-    nb = self.base_vectors.shape[0]
-    D = np.full((len(vectors), k), np.inf, dtype='float32')
-    I = np.full((len(vectors), k), -1, dtype='int64')
-
     self.index.efSearch = self.query_params.efSearch
+    return
 
-    for start_idx in range(0, nq, self.batch_size):
-        end_idx = min(start_idx + self.batch_size, nq)
-        batch_size = end_idx - start_idx
-        filter_map = np.zeros((batch_size, nb), dtype='int8')
 
-        for i in range(start_idx, end_idx):
-            rel_i = i - start_idx
-            current_filter = filters[i]
-            valid_ids = self.attribute_index.get_valid_ids_conj(current_filter)
+@Acorn.register_query("structured", "conjunction")
+def query_structured_conjunction(self, vector, filter, k):
+    nb = self.base_vectors.shape[0]
+    filter_map = np.zeros((1, nb), dtype='int8')
 
-            filter_map[rel_i][valid_ids] = 1
-        
-        batch_q_vecs = vectors[start_idx:end_idx]
-        D_batch, I_batch = self.index.search(batch_q_vecs, k, filter_map)
-        D[start_idx:end_idx] = D_batch
-        I[start_idx:end_idx] = I_batch
+    valid_ids = self.attribute_index.get_valid_ids_conj(filter)
 
-    return D, I
+    filter_map[0][valid_ids] = 1
+
+    D, I = self.index.search(vector.reshape(1, -1), k, filter_map)
+    
+    return D[0], I[0]
+
+
+@Acorn.register_init_query("structured", "CNF")
+def init_query_structured_CNF(self, vectors, filters, k, parameters):
+    self.query_params = parameters
+    self.index.efSearch = self.query_params.efSearch
+    return
 
 @Acorn.register_query("structured", "CNF")
-def query_structured_CNF(self, vectors, filters, k, parameters):
-    self.query_params = parameters
-    nq = len(vectors)
+def query_structured_CNF(self, vector, filter, k):
     nb = self.base_vectors.shape[0]
-    D = np.full((len(vectors), k), np.inf, dtype='float32')
-    I = np.full((len(vectors), k), -1, dtype='int64')
+    
+    filter_map = np.zeros((1, nb), dtype='int8')
 
-    self.index.efSearch = self.query_params.efSearch
+    valid_ids = self.attribute_index.get_valid_ids_cnf(filter)
+    filter_map[0][valid_ids] = 1
 
-    for start_idx in range(0, nq, self.batch_size):
-        end_idx = min(start_idx + self.batch_size, nq)
-        batch_size = end_idx - start_idx
-        filter_map = np.zeros((batch_size, nb), dtype='int8')
-
-        for i in range(start_idx, end_idx):
-            rel_i = i - start_idx
-            current_filter = filters[i]
-            valid_ids = self.attribute_index.get_valid_ids_cnf(current_filter)
-            filter_map[rel_i][valid_ids] = 1
-        
-        batch_q_vecs = vectors[start_idx:end_idx]
-        D_batch, I_batch = self.index.search(batch_q_vecs, k, filter_map)
-        D[start_idx:end_idx] = D_batch
-        I[start_idx:end_idx] = I_batch
-
-    return D, I
+    D, I = self.index.search(vector.reshape(1, -1), k, filter_map)
+    
+    return D[0], I[0]
 
 @Acorn.register_build("sparse")
 def build_sparse_translator(self, vectors, attributes, parameters):
@@ -107,8 +89,14 @@ def build_sparse_translator(self, vectors, attributes, parameters):
     
     return build_structured(self, vectors, encoded_attrs, parameters)
 
-@Acorn.register_query("sparse", "conjunction")
-def query_sparse_conjunction_translator(self, vectors, filters, k, parameters):
-    encoded_filters = self.attribute_encoder.get_encoded_queries(filters)
+@Acorn.register_init_query("sparse", "conjunction")
+def init_query_sparse_conjunction_translator(self, vectors, filters, k, parameters):
+    self.query_params = parameters
+    self.index.efSearch = self.query_params.efSearch
+    return
 
-    return query_structured_conjunction(self, vectors, encoded_filters, k, parameters)
+@Acorn.register_query("sparse", "conjunction")
+def query_sparse_conjunction_translator(self, vector, filter, k):
+    encoded_filters = self.attribute_encoder.get_encoded_queries(filter)
+
+    return query_structured_conjunction(self, vector, encoded_filters[0], k)

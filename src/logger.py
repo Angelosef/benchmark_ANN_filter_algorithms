@@ -4,10 +4,7 @@ import time
 import numpy as np
 import pandas as pd
 from src.datasets.base_dataset import Dataset
-from src.datasets.sift import siftDataset
-from src.datasets.glove import GloVeDataset
-from src.datasets.yfcc import yfccDataset
-from src.datasets.gist import gistDataset
+import src.datasets.all_datasets
 
 
 class BenchmarkLogger:
@@ -19,7 +16,7 @@ class BenchmarkLogger:
     def get_log_dir(self):
         return self.base_log_dir
 
-    def log_benchmark(self, runner_results, D, I):
+    def log_benchmark(self, runner_results, D, I, L):
         timestamp = time.strftime("%Y%m%d-%H%M%S")
         run_name = f"{runner_results['index_name']}_{runner_results['dataset_name']}_{timestamp}"
         run_dir = os.path.join(self.base_log_dir, run_name)
@@ -27,6 +24,8 @@ class BenchmarkLogger:
 
         np.save(os.path.join(run_dir, "indices.npy"), I)
         np.save(os.path.join(run_dir, "distances.npy"), D)
+        np.save(os.path.join(run_dir, "latencies.npy"), L)
+        
 
         metadata = {
             "run_id": run_name,
@@ -76,8 +75,9 @@ class BenchmarkLogger:
         metadata["avg_recall"] = avg_recall
         metadata["p2_recall"] = np.percentile(recalls, 2)
         metadata["p5_recall"] = np.percentile(recalls, 5)
+        metadata["p25_recall"] = np.percentile(recalls, 25)
         metadata["p50_recall"] = np.percentile(recalls, 50)
-        metadata["p95_recall"] = np.percentile(recalls, 95)
+        metadata["p75_recall"] = np.percentile(recalls, 75)
         metadata["p95_recall"] = np.percentile(recalls, 95)
         metadata["p98_recall"] = np.percentile(recalls, 98)
 
@@ -87,6 +87,25 @@ class BenchmarkLogger:
             json.dump(metadata, f, indent=4)
         
         return avg_recall
+    
+    def log_latency_stats(self, run_dir):
+        latencies = np.load(os.path.join(run_dir, 'latencies.npy'))
+
+        with open(os.path.join(run_dir, "metadata.json"), "r") as f:
+            metadata = json.load(f)
+        
+        metadata['avg_latency'] = np.mean(latencies)
+        metadata["p2_latency"] = np.percentile(latencies, 2)
+        metadata["p5_latency"] = np.percentile(latencies, 5)
+        metadata["p25_latency"] = np.percentile(latencies, 25)
+        metadata["p50_latency"] = np.percentile(latencies, 50)
+        metadata["p75_latency"] = np.percentile(latencies, 75)
+        metadata["p95_latency"] = np.percentile(latencies, 95)
+        metadata["p98_latency"] = np.percentile(latencies, 98)
+
+        with open(os.path.join(run_dir, "metadata.json"), "w") as f:
+            json.dump(metadata, f, indent=4)
+        return
 
 def calculate_avg_recall(I, gt_ids, k):
     """

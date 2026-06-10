@@ -199,3 +199,10 @@ class siftDataset(Dataset):
             filters[:, i] = self.rng.integers(0, n_max, size)
         
         return filters
+
+    def get_selectivity_path(self, query_type=None):
+        subset_path = self.get_subset_path_or_fail()
+        param = 'restriction_' + str(query_type)
+        path = os.path.join(subset_path, 'analysis', param, 'selectivity.npy')
+        
+        return path

@@ -16,7 +16,7 @@ if __name__ == '__main__':
 
     if test_glove:
         # --- GloVe ---
-        dataset = GloVeDataset(subset_size=1.0)
+        dataset = GloVeDataset(subset_size=0.1)
         dataset.prepare()
 
     if test_yfcc:    

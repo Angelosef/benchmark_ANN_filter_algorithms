@@ -32,65 +32,66 @@ def build_structured(self, vectors, attributes, parameters):
     self.index.add(self.base_vectors)
     return
 
-@HNSWPostfilter.register_query("structured", "conjunction")
-def query_structured_conjunction(self, vectors, filters, k, parameters):
+@HNSWPostfilter.register_init_query("structured", "conjunction")
+def init_query_structured_conjunction(self, vectors, filters, k, parameters):
     self.query_parameters = parameters
     self.index.hnsw.efSearch = self.query_parameters.efSearch
+    return
 
-    D, I = self.index.search(vectors, self.query_parameters.initial_k)
+@HNSWPostfilter.register_query("structured", "conjunction")
+def query_structured_conjunction(self, vector, filter, k):
+    
+    D, I = self.index.search(vector.reshape(1, -1), self.query_parameters.initial_k)
+    dist = D[0]
+    indices = I[0]
 
-    D_updated = np.full((len(vectors), k), np.inf)
-    I_updated = np.full((len(vectors), k), -1)
+    D_updated = np.full(k, np.inf)
+    I_updated = np.full(k, -1)
 
-    for q_index, result_set in enumerate(I):
-        valid_pairs = []  # (distance, index)
-        filter = filters[q_index]
+    valid_pairs = []
+    for i, idx in enumerate(indices):
+        if valid_structured_conjunction(
+            self.base_attributes[idx],
+            filter
+        ):
+            valid_pairs.append((dist[i], idx))
 
-        for i, idx in enumerate(result_set):
-            if valid_structured_conjunction(
-                self.base_attributes[idx],
-                filter
-            ):
-                valid_pairs.append((D[q_index][i], idx))
+    num_valid = min(len(valid_pairs), k)
 
-        valid_pairs.sort(key=lambda x: x[0])
-
-        num_valid = min(len(valid_pairs), k)
-
-        for j in range(num_valid):
-            D_updated[q_index][j] = valid_pairs[j][0]
-            I_updated[q_index][j] = valid_pairs[j][1]
+    for i in range(num_valid):
+        D_updated[i] = valid_pairs[i][0]
+        I_updated[i] = valid_pairs[i][1]
 
     return D_updated, I_updated
 
-@HNSWPostfilter.register_query("structured", "CNF")
-def query_structured_CNF(self, vectors, filters, k, parameters):
+@HNSWPostfilter.register_init_query("structured", "CNF")
+def init_query_structured_CNF(self, vectors, filters, k, parameters):
     self.query_parameters = parameters
     self.index.hnsw.efSearch = self.query_parameters.efSearch
+    return
 
-    D, I = self.index.search(vectors, self.query_parameters.initial_k)
+@HNSWPostfilter.register_query("structured", "CNF")
+def query_structured_CNF(self, vector, filter, k):
+    D, I = self.index.search(vector.reshape(1, -1), self.query_parameters.initial_k)
+    dist = D[0]
+    indices = I[0]
 
-    D_updated = np.full((len(vectors), k), np.inf)
-    I_updated = np.full((len(vectors), k), -1)
+    D_updated = np.full(k, np.inf)
+    I_updated = np.full(k, -1)
 
-    for q_index, result_set in enumerate(I):
-        valid_pairs = []
-        filter = filters[q_index]
+    valid_pairs = []
+    
+    for i, idx in enumerate(indices):
+        if valid_structured_CNF(
+            self.base_attributes[idx],
+            filter
+        ):
+            valid_pairs.append((dist[i], idx))
 
-        for i, idx in enumerate(result_set):
-            if valid_structured_CNF(
-                self.base_attributes[idx],
-                filter
-            ):
-                valid_pairs.append((D[q_index][i], idx))
-
-        valid_pairs.sort(key=lambda x: x[0])
-
-        num_valid = min(len(valid_pairs), k)
-
-        for j in range(num_valid):
-            D_updated[q_index][j] = valid_pairs[j][0]
-            I_updated[q_index][j] = valid_pairs[j][1]
+    num_valid = min(len(valid_pairs), k)
+    for i in range(num_valid):
+        D_updated[i] = valid_pairs[i][0]
+        I_updated[i] = valid_pairs[i][1]
 
     return D_updated, I_updated
 
@@ -106,40 +107,39 @@ def build_sparse(self, vectors, attributes, parameters):
     self.index.add(self.base_vectors)
     return
 
-@HNSWPostfilter.register_query("sparse", "conjunction")
-def query_structured_CNF(self, vectors, filters, k, parameters):
-    # base attributes and query filters are supposed to be csr matrices
-    filters.sort_indices()
+@HNSWPostfilter.register_init_query("sparse", "conjunction")
+def init_query_sparse_conjunction(self, vectors, filters, k, parameters):
     self.query_parameters = parameters
     self.index.hnsw.efSearch = self.query_parameters.efSearch
+    return
 
-    D, I = self.index.search(vectors, self.query_parameters.initial_k)
+@HNSWPostfilter.register_query("sparse", "conjunction")
+def query_structured_CNF(self, vector, filter, k):
+        
+    D, I = self.index.search(vector.reshape(1, -1), self.query_parameters.initial_k)
+    dist = D[0]
+    indices = I[0]
 
-    D_updated = np.full((len(vectors), k), np.inf)
-    I_updated = np.full((len(vectors), k), -1)
+    D_updated = np.full(k, np.inf)
+    I_updated = np.full(k, -1)
 
-    for q_index, result_set in enumerate(I):
-        valid_pairs = []
-        start = filters.indptr[q_index]
-        end = filters.indptr[q_index+1]
-        filter_indices = filters.indices[start:end]
+    valid_pairs = []
+    filter_indices = filter.indices
 
-        for i, idx in enumerate(result_set):
+    for i, idx in enumerate(indices):
 
-            if valid_csr_conjunction(
-                self.base_attributes,
-                idx,
-                filter_indices
-            ):
-                valid_pairs.append((D[q_index][i], idx))
+        if valid_csr_conjunction(
+            self.base_attributes,
+            idx,
+            filter_indices
+        ):
+            valid_pairs.append((dist[i], idx))
 
-        valid_pairs.sort(key=lambda x: x[0])
-
-        num_valid = min(len(valid_pairs), k)
-
-        for j in range(num_valid):
-            D_updated[q_index][j] = valid_pairs[j][0]
-            I_updated[q_index][j] = valid_pairs[j][1]
+    num_valid = min(len(valid_pairs), k)
+    for i in range(num_valid):
+        D_updated[i] = valid_pairs[i][0]
+        I_updated[i] = valid_pairs[i][1]
 
     return D_updated, I_updated
+
 

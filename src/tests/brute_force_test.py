@@ -11,10 +11,10 @@ class dummy:
         pass
 
 if __name__=="__main__":
-    test_sift = False
+    test_sift = True
     test_glove = True
-    test_yfcc = False
-    test_gist = False
+    test_yfcc = True
+    test_gist = True
 
     if test_sift:
         print("running brute force on sift dataset")
@@ -27,11 +27,11 @@ if __name__=="__main__":
             print("initializing benchmark")
             runner = BenchmarkRunner(dataset, num_restrictions, BruteForceIdFilter, dummy(), dummy())
             print("running benchmark")
-            D, I, metadata = runner.run()
+            D, I, L, metadata = runner.run()
 
             print("logging results")
             logger = BenchmarkLogger()
-            run_path = logger.log_benchmark(metadata, D, I)
+            run_path = logger.log_benchmark(metadata, D, I, L)
             recall = logger.log_recall(run_path)
 
             print("recall = ", recall)
@@ -39,18 +39,18 @@ if __name__=="__main__":
     if test_glove:
             print("running brute force on glove dataset")
         
-            subset_size = 1.0
+            subset_size = 0.1
             k = 10
         
             dataset = GloVeDataset(subset_size, k)
             print("initializing benchmark")
             runner = BenchmarkRunner(dataset, None, BruteForceIdFilter, dummy(), dummy())
             print("running benchmark")
-            D, I, metadata = runner.run()
+            D, I, L, metadata = runner.run()
 
             print("logging results")
             logger = BenchmarkLogger()
-            run_path = logger.log_benchmark(metadata, D, I)
+            run_path = logger.log_benchmark(metadata, D, I, L)
             recall = logger.log_recall(run_path)
 
             print("recall = ", recall)
@@ -65,11 +65,11 @@ if __name__=="__main__":
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, BruteForceIdFilter, dummy(), dummy())
         print("running benchmark")
-        D, I, metadata = runner.run()
+        D, I, L, metadata = runner.run()
 
         print("logging results")
         logger = BenchmarkLogger()
-        run_path = logger.log_benchmark(metadata, D, I)
+        run_path = logger.log_benchmark(metadata, D, I, L)
         recall = logger.log_recall(run_path)
 
         print("recall = ", recall)
@@ -84,11 +84,11 @@ if __name__=="__main__":
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, BruteForceIdFilter, dummy(), dummy())
         print("running benchmark")
-        D, I, metadata = runner.run()
+        D, I, L, metadata = runner.run()
 
         print("logging results")
         logger = BenchmarkLogger()
-        run_path = logger.log_benchmark(metadata, D, I)
+        run_path = logger.log_benchmark(metadata, D, I, L)
         recall = logger.log_recall(run_path)
 
         print("recall = ", recall)

@@ -13,10 +13,10 @@ def _benchmark_worker(dataset, ds_query_param, algo_class, b_params, q_params):
     
     # Initialize the runner and execute
     runner = BenchmarkRunner(dataset, ds_query_param, algo_class, b_params, q_params)
-    D, I, metadata = runner.run()
+    D, I, L, metadata = runner.run()
     
     # Log results
-    run_path = logger.log_benchmark(metadata, D, I)
+    run_path = logger.log_benchmark(metadata, D, I, L)
     recall = logger.log_recall(run_path)
     
     print(f"Algorithm: {algo_class.__name__} | "

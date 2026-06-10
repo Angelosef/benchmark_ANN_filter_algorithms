@@ -7,9 +7,9 @@ import numpy as np
 
 if __name__ == '__main__':
     test_sift = False
-    test_glove = False
+    test_glove = True
     test_yfcc = False
-    test_gist = True
+    test_gist = False
     
     if test_sift:
         # --- SIFT ---

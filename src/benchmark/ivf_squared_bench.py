@@ -44,8 +44,8 @@ def bench_gist():
     runFullBenchmark(ds, None, IVFSquared, build_params, query_params)
 
 if __name__=="__main__":
-    test_yfcc = False
-    test_gist = True
+    test_yfcc = True
+    test_gist = False
     
     if test_yfcc:
         p = multiprocessing.Process(

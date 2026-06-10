@@ -45,7 +45,7 @@ class BenchmarkRunner:
 
         print("start querying")
         start_query = time.time()
-        D, I = self.index.query(
+        D, I, L = self.index.query(
             self.dataset.get_query_vectors(),
             self.dataset.get_query_filters(self.ds_query_param),
             self.dataset.get_neighbors_retrieved(),
@@ -75,5 +75,5 @@ class BenchmarkRunner:
             "dim": self.dim,
             "metric": self.metric
         }
-        return D, I, metadata
+        return D, I, L, metadata
     
