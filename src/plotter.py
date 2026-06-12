@@ -387,14 +387,37 @@ class ANNBenchmarkPlotter:
         selectivities = selectivities / metadata['base_count']
         self.plot_selectivity_avg_recall(selectivities, recalls,  os.path.join(run_dir, 'selectivity_avg_recall.png'))
 
-    def plot_selectivity_avg_recall(self, selectivities, recalls, save_path, num_grid_points=200, bandwidth=0.005):
-        grid_x = np.geomspace(selectivities.min(), selectivities.max(), num_grid_points)
+    def plot_selectivity_avg_recall(self, selectivities, recalls, save_path, num_grid_points=200, win_size=50):
+        grid_x = np.linspace(selectivities.min(), selectivities.max(), num_grid_points)
         grid_y = np.zeros_like(grid_x)
+
+        idx = np.argsort(selectivities)
+        selectivities = selectivities[idx]
+        recalls = recalls[idx]
+
+        sel_idx = np.zeros_like(grid_x, dtype=int) 
+        idx = 0
+        max_selectivities_idx = len(selectivities) - 1
+
+        for i in range(len(sel_idx)):
+            while idx < max_selectivities_idx and selectivities[idx] < grid_x[i]:
+                idx += 1
+            sel_idx[i] = idx
+
+        bandwidth = np.zeros_like(grid_x)
+        for i in range(len(bandwidth)):
+            idx = sel_idx[i]
+            idx = int(idx)
+            
+            min_idx = max(0, idx - win_size)
+            max_idx = min(len(selectivities) - 1, idx + win_size)
+            
+            bandwidth[i] = max(10e-5, selectivities[max_idx] - selectivities[min_idx])
 
         for i, x in enumerate(grid_x):
             squared_distances = (selectivities - x) ** 2
             
-            weights = np.exp(-squared_distances / (2 * (bandwidth ** 2)))
+            weights = np.exp(-squared_distances / (2 * (bandwidth[i] ** 2)))
             
             sum_weights = np.sum(weights)
             if sum_weights > 0:
@@ -428,14 +451,37 @@ class ANNBenchmarkPlotter:
         selectivities = selectivities / metadata['base_count']
         self.plot_selectivity_avg_latency(selectivities, latencies,  os.path.join(run_dir, 'selectivity_avg_latency.png'))
 
-    def plot_selectivity_avg_latency(self, selectivities, latencies, save_path, num_grid_points=200, bandwidth=0.005):
+    def plot_selectivity_avg_latency(self, selectivities, latencies, save_path, num_grid_points=200, win_size=50):
         grid_x = np.geomspace(selectivities.min(), selectivities.max(), num_grid_points)
         grid_y = np.zeros_like(grid_x)
+
+        idx = np.argsort(selectivities)
+        selectivities = selectivities[idx]
+        latencies = latencies[idx]
+
+        sel_idx = np.zeros_like(grid_x, dtype=int) 
+        idx = 0
+        max_selectivities_idx = len(selectivities) - 1
+
+        for i in range(len(sel_idx)):
+            while idx < max_selectivities_idx and selectivities[idx] < grid_x[i]:
+                idx += 1
+            sel_idx[i] = idx
+
+        bandwidth = np.zeros_like(grid_x)
+        for i in range(len(bandwidth)):
+            idx = sel_idx[i]
+            idx = int(idx)
+            
+            min_idx = max(0, idx - win_size)
+            max_idx = min(len(selectivities) - 1, idx + win_size)
+            
+            bandwidth[i] = max(10e-5, selectivities[max_idx] - selectivities[min_idx])
 
         for i, x in enumerate(grid_x):
             squared_distances = (selectivities - x) ** 2
             
-            weights = np.exp(-squared_distances / (2 * (bandwidth ** 2)))
+            weights = np.exp(-squared_distances / (2 * (bandwidth[i] ** 2)))
             
             sum_weights = np.sum(weights)
             if sum_weights > 0:

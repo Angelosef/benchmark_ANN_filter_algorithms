@@ -22,6 +22,8 @@ if __name__ == "__main__":
             if os.path.isdir(os.path.join(target_dir, name))
     ]
 
+    # run_dirs = ['logs/HNSWPostfilter_YFCC_20260610-232410']
+
     for run_directory in run_dirs:
         logger.log_recall(run_directory)
         logger.log_latency_stats(run_directory)
