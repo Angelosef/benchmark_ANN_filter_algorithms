@@ -10,7 +10,7 @@ import multiprocessing
 def bench_sift(nr):
     ds = siftDataset(subset_size=1.0, neighbors_retrieved=10)
     nlist = generateLogGrid(200, 300, 2)
-    nprobe = generateLogGrid(10, 100, 4)
+    nprobe = generateLogGrid(5, 100, 4)
 
     build_params = [
         IVFIdFilterBuildParameters(nlist=nl)
@@ -27,7 +27,7 @@ def bench_glove():
     ds = GloVeDataset(subset_size=1.0, neighbors_retrieved=10)
         
     nlist = generateLogGrid(200, 300, 2)
-    nprobe = generateLogGrid(10, 100, 4)
+    nprobe = generateLogGrid(5, 100, 4)
 
     build_params = [
         IVFIdFilterBuildParameters(nlist=nl)
@@ -43,7 +43,7 @@ def bench_yfcc():
     ds = yfccDataset(subset_size=0.1, neighbors_retrieved=10)
         
     nlist = generateLogGrid(200, 300, 2)
-    nprobe = generateLogGrid(10, 100, 4)
+    nprobe = generateLogGrid(5, 100, 4)
 
     build_params = [
         IVFIdFilterBuildParameters(nlist=nl)
@@ -76,8 +76,8 @@ def bench_gist():
 if __name__=="__main__":
     test_sift = False
     test_glove = False
-    test_yfcc = False
-    test_gist = True
+    test_yfcc = True
+    test_gist = False
 
     if test_sift:
         

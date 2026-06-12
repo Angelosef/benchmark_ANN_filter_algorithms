@@ -4,7 +4,7 @@ if __name__ == '__main__':
     plotter = ANNBenchmarkPlotter(log_root_dir="logs", output_dir="benchmark_plots")
     
     test_sift = False
-    test_glove = True
+    test_glove = False
     test_yfcc = True
     test_gist = False
 

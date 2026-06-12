@@ -156,7 +156,7 @@ class ANNBenchmarkPlotter:
                 xmax=row["p75_recall"],
                 color=color,
                 linewidth=1,
-                alpha=0.35,
+                alpha=0.5,
                 zorder=2,
             )
 
@@ -166,6 +166,7 @@ class ANNBenchmarkPlotter:
                 ymax=row["p75_latency"],
                 color=color,
                 linewidth=1,
+                alpha=0.5,
                 zorder=2,
             )
 
@@ -351,19 +352,19 @@ class ANNBenchmarkPlotter:
         self.plot_recall_latency_hexbin(recalls, latencies, os.path.join(run_dir, 'recall_latency_hexbin.png'))
 
     def plot_recall_latency_hexbin(self, recalls, latencies, save_path):
-        latencies_ms = np.asarray(latencies) * 1000  # Convert seconds to ms
-
+        latencies_ms = np.asarray(latencies) * 1000
+        
         fig, ax = plt.subplots(figsize=(8, 6))
         
         hb = ax.hexbin(
             recalls, 
             latencies_ms, 
-            gridsize=15, 
+            gridsize=10, 
             cmap='YlGnBu', 
             mincnt=1
         )
         
-        ax.set_title('Recall vs Latency Density (HNSW Post-filter)', fontsize=14, pad=15)
+        ax.set_title('Recall vs Latency Density', fontsize=14, pad=15)
         ax.set_xlabel('Recall', fontsize=12)
         ax.set_ylabel('Latency (ms)', fontsize=12)
         ax.grid(True, linestyle='--', alpha=0.5)
@@ -382,31 +383,35 @@ class ANNBenchmarkPlotter:
     def load_and_plot_selectivity_avg_recall(self, run_dir, selectivity_path):
         recalls = np.load(os.path.join(run_dir, 'recalls.npy'))
         selectivities = np.load(selectivity_path)
+        metadata = self._load_run_data(run_dir.removeprefix(str(self.log_root)+'/'))
+        selectivities = selectivities / metadata['base_count']
         self.plot_selectivity_avg_recall(selectivities, recalls,  os.path.join(run_dir, 'selectivity_avg_recall.png'))
 
-    def plot_selectivity_avg_recall(self, selectivities, recalls, save_path):
-        idx = np.argsort(selectivities)
+    def plot_selectivity_avg_recall(self, selectivities, recalls, save_path, num_grid_points=200, bandwidth=0.005):
+        grid_x = np.geomspace(selectivities.min(), selectivities.max(), num_grid_points)
+        grid_y = np.zeros_like(grid_x)
 
-        selectivities = selectivities[idx]
-        recalls = recalls[idx]
+        for i, x in enumerate(grid_x):
+            squared_distances = (selectivities - x) ** 2
+            
+            weights = np.exp(-squared_distances / (2 * (bandwidth ** 2)))
+            
+            sum_weights = np.sum(weights)
+            if sum_weights > 0:
+                grid_y[i] = np.sum(recalls * weights) / sum_weights
+            else:
+                nearest_idx = np.abs(selectivities - x).argmin()
+                grid_y[i] = recalls[nearest_idx]
 
-        avg_recalls = (
-            pd.Series(recalls)
-            .rolling(window=100, center=True, min_periods=1)
-            .mean()
-            .to_numpy()
-        )
-        
         fig, ax = plt.subplots(figsize=(8, 6))
+        ax.scatter(selectivities, recalls, alpha=0.05, color='gray', s=10)
 
-        ax.scatter(selectivities, recalls, alpha=0.05, color='gray', s=10, label='Individual Queries')
-
-        ax.plot(selectivities, avg_recalls, color='crimson', linewidth=3, label='Rolling Average Trend')
+        ax.plot(grid_x, grid_y, color='crimson', linewidth=3)
+        
         ax.set_title('How Selectivity Affects Recall')
         ax.set_xlabel('Selectivity')
         ax.set_ylabel('Recall')
         ax.set_ylim(-0.05, 1.05)
-        ax.legend()
 
         output_dir = os.path.dirname(save_path)
         if output_dir:
@@ -419,31 +424,34 @@ class ANNBenchmarkPlotter:
     def load_and_plot_selectivity_avg_latency(self, run_dir, selectivity_path):
         latencies = np.load(os.path.join(run_dir, 'latencies.npy'))
         selectivities = np.load(selectivity_path)
+        metadata = self._load_run_data(run_dir.removeprefix(str(self.log_root)+'/'))
+        selectivities = selectivities / metadata['base_count']
         self.plot_selectivity_avg_latency(selectivities, latencies,  os.path.join(run_dir, 'selectivity_avg_latency.png'))
 
-    def plot_selectivity_avg_latency(self, selectivities, latencies, save_path):
-        idx = np.argsort(selectivities)
+    def plot_selectivity_avg_latency(self, selectivities, latencies, save_path, num_grid_points=200, bandwidth=0.005):
+        grid_x = np.geomspace(selectivities.min(), selectivities.max(), num_grid_points)
+        grid_y = np.zeros_like(grid_x)
 
-        selectivities = selectivities[idx]
-        latencies = latencies[idx]
+        for i, x in enumerate(grid_x):
+            squared_distances = (selectivities - x) ** 2
+            
+            weights = np.exp(-squared_distances / (2 * (bandwidth ** 2)))
+            
+            sum_weights = np.sum(weights)
+            if sum_weights > 0:
+                grid_y[i] = np.sum(latencies * weights) / sum_weights
+            else:
+                nearest_idx = np.abs(selectivities - x).argmin()
+                grid_y[i] = latencies[nearest_idx]
 
-        avg_latencies = (
-            pd.Series(latencies)
-            .rolling(window=200, center=True, min_periods=1)
-            .mean()
-            .to_numpy()
-        )
-        
         fig, ax = plt.subplots(figsize=(8, 6))
+        ax.scatter(selectivities, latencies, alpha=0.05, color='gray', s=10)
 
-        ax.scatter(selectivities, latencies, alpha=0.05, color='gray', s=10, label='Individual Queries')
-
-        ax.plot(selectivities, avg_latencies, color='crimson', linewidth=3, label='Rolling Average Trend')
-        ax.set_title('How Selectivity Affects latency')
+        ax.plot(grid_x, grid_y, color='crimson', linewidth=3)
+        
+        ax.set_title('How Selectivity Affects Latency')
         ax.set_xlabel('Selectivity')
-        ax.set_ylabel('latency')
-        ax.set_ylim(-0.05, 1.05)
-        ax.legend()
+        ax.set_ylabel('Latency')
 
         output_dir = os.path.dirname(save_path)
         if output_dir:
