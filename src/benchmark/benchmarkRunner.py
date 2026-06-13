@@ -45,7 +45,7 @@ class BenchmarkRunner:
 
         print("start querying")
         start_query = time.time()
-        D, I, L = self.index.query(
+        D, I, L, total_query_time = self.index.query(
             self.dataset.get_query_vectors(),
             self.dataset.get_query_filters(self.ds_query_param),
             self.dataset.get_neighbors_retrieved(),
@@ -61,6 +61,7 @@ class BenchmarkRunner:
             "dataset_name": self.dataset.get_name(),
             "build_time": build_time,
             "query_time": query_time,
+            "total_query_time": total_query_time,
             "index_memory": index_memory,
             "initial_peak": initial_peak,
             "peak_memory": final_peak,

@@ -8,6 +8,7 @@ class BaseANNIndex(ABC):
     def __init__(self, dim: int, metric: str):
         self.dim = dim
         self.metric = metric
+        self.rng = np.random.default_rng(seed=42)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -70,6 +71,16 @@ class BaseANNIndex(ABC):
         
         num_threads = os.cpu_count() or 1
 
+        num_warm_up = 100
+        warm_up_indices = self.rng.choice(np.arange(len(vectors)), size=num_warm_up, replace=False)
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            unused_futures = [
+                executor.submit(self.timed_single_query, vectors[i], filters[i], k, single_query_fn) 
+                for i in warm_up_indices
+            ]
+        
+        start_time = time.perf_counter()
+
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
             futures = [
                 executor.submit(self.timed_single_query, vectors[i], filters[i], k, single_query_fn) 
@@ -82,8 +93,10 @@ class BaseANNIndex(ABC):
             D[q_idx] = dist
             I[q_idx] = indices
             L[q_idx] = latency
+        
+        total_query_time = time.perf_counter() - start_time
 
-        return D, I, L
+        return D, I, L, total_query_time
 
     @abstractmethod
     def name(self) -> str:

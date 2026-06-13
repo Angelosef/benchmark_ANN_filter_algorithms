@@ -16,6 +16,7 @@ class yfccDataset(Dataset):
             "base.metadata.10M.spmat": "base.metadata.10M.spmat",
             "query.metadata.public.100K.spmat": "query.metadata.public.100K.spmat"
         }
+        self.max_queries = 10_000
         
         return
     
@@ -68,7 +69,7 @@ class yfccDataset(Dataset):
         full_query_count = self.get_full_query_count()
 
         base_size = int(full_base_count * self.subset_size)
-        query_size = int(full_query_count * self.subset_size)
+        query_size = min(int(full_query_count * self.subset_size), self.max_queries)
 
         base_ids = self.rng.choice(np.arange(full_base_count), size=base_size, replace=False)
         base_ids.sort()
