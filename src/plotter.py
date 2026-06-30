@@ -152,8 +152,8 @@ class ANNBenchmarkPlotter:
             # ----- inner cross (25-75 percentile) -----
             plt.hlines(
                 y=y,
-                xmin=row["p25_recall"],
-                xmax=row["p75_recall"],
+                xmin=x - row["std_recall"],
+                xmax=x + row["std_recall"],
                 color=color,
                 linewidth=1,
                 alpha=0.5,

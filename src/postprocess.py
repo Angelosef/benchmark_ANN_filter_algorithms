@@ -26,6 +26,8 @@ if __name__ == "__main__":
 
     for run_directory in run_dirs:
         logger.log_recall(run_directory)
+
+        """
         logger.log_latency_stats(run_directory)
 
         
@@ -44,3 +46,6 @@ if __name__ == "__main__":
 
         plotter.load_and_plot_selectivity_avg_recall(run_directory, sel_path)
         plotter.load_and_plot_selectivity_avg_latency(run_directory, sel_path)
+
+        """
+        

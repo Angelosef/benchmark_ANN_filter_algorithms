@@ -73,6 +73,7 @@ class BenchmarkLogger:
 
         avg_recall = np.mean(recalls)
         metadata["avg_recall"] = avg_recall
+        metadata["std_recall"] = np.std(recalls)
         metadata["p2_recall"] = np.percentile(recalls, 2)
         metadata["p5_recall"] = np.percentile(recalls, 5)
         metadata["p25_recall"] = np.percentile(recalls, 25)
