@@ -9,9 +9,9 @@ from src.logger import BenchmarkLogger
 
 if __name__=="__main__":
     test_sift = False
-    test_glove = True
+    test_glove = False
     test_yfcc = False
-    test_gist = False
+    test_gist = True
 
     if test_sift:
         subset_size = 0.1
@@ -77,7 +77,7 @@ if __name__=="__main__":
         print("recall = ", recall)
     
     if test_gist:
-        subset_size = 0.1
+        subset_size = 1.0
         k = 10
 
         dataset = gistDataset(subset_size, k)

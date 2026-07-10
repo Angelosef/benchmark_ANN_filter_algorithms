@@ -45,7 +45,7 @@ def bench_gist():
 
 if __name__=="__main__":
     test_yfcc = True
-    test_gist = False
+    test_gist = True
     
     if test_yfcc:
         p = multiprocessing.Process(

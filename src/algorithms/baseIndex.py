@@ -71,7 +71,7 @@ class BaseANNIndex(ABC):
         
         num_threads = os.cpu_count() or 1
 
-        num_warm_up = 100
+        num_warm_up = min(100, len(vectors))
         warm_up_indices = self.rng.choice(np.arange(len(vectors)), size=num_warm_up, replace=False)
         with ThreadPoolExecutor(max_workers=num_threads) as executor:
             unused_futures = [

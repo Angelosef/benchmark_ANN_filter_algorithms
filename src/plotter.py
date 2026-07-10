@@ -53,7 +53,7 @@ class ANNBenchmarkPlotter:
         """Creates the Recall/Latency trade-off curve."""
         plt.figure(figsize=(10, 6))
         
-        df = df.sort_values(by=['index_name', 'query_time'])
+        df = df.sort_values(by=['index_name', 'total_query_time'])
     
         pareto_frames = []
         
@@ -75,7 +75,7 @@ class ANNBenchmarkPlotter:
         sns.lineplot(
             data=frontier_df, 
             x='avg_recall', 
-            y='query_time', 
+            y='total_query_time', 
             hue='index_name', 
             marker='o',
             sort=True # Ensure points are connected in order of x-axis
@@ -84,7 +84,7 @@ class ANNBenchmarkPlotter:
         plt.yscale('log')
         plt.title(f"Recall vs Query Latency ({dataset_name} - {subset_size} - {ds_query_param})")
         plt.xlabel("Recall (Higher is better)")
-        plt.ylabel("Query Time (seconds, Log Scale)")
+        plt.ylabel("Total Latency (seconds, Log Scale)")
         plt.grid(True, which="both", ls="-", alpha=0.5)
         
         fname = self.output_dir / f"{dataset_name}_{subset_size}_{ds_query_param}_recall_total_latency.png"
@@ -195,7 +195,7 @@ class ANNBenchmarkPlotter:
         plt.figure(figsize=(10, 6))
         sns.set_theme(style="whitegrid")
         
-        df['qps'] = df['query_count'] / df['query_time']
+        df['qps'] = df['query_count'] / df['total_query_time']
         df = df.sort_values(by=['index_name', 'qps'], ascending=False)
 
         pareto_frames = []
@@ -223,28 +223,6 @@ class ANNBenchmarkPlotter:
             marker='o',
             sort=True
         )
-        
-        lines = ax.get_lines()
-        unique_algos = frontier_df['index_name'].unique()
-        algo_color_map = {algo: lines[i].get_color() for i, algo in enumerate(unique_algos)}
-
-        for algo, color in algo_color_map.items():
-            algo_frontier = frontier_df[frontier_df['index_name'] == algo]
-            
-            left_err = np.maximum(algo_frontier['avg_recall'] - algo_frontier['p5_recall'], 0.0)
-            right_err = np.maximum(algo_frontier['p95_recall'] - algo_frontier['avg_recall'], 0.0)
-            x_errors = [left_err, right_err]
-
-            plt.errorbar(
-                x=algo_frontier['avg_recall'],
-                y=algo_frontier['qps'],
-                xerr=x_errors,
-                fmt='none',          # 'none' means do not plot markers again (handled by lineplot)
-                ecolor=color,        # Match the exact color of the line
-                alpha=0.25,          # Very transparent to keep it lightweight and clean
-                elinewidth=1.5,      # Thin line to prevent cluttering
-                capsize=0            # No ugly vertical ticks/caps at the ends of the bars
-            )
         
         plt.yscale('log')
         plt.title(f"Recall vs qps ({dataset_name} - {subset_size} - {ds_query_param})", fontsize=14, pad=15)
@@ -318,10 +296,12 @@ class ANNBenchmarkPlotter:
     
     def load_and_plot_recall(self, run_dir):
         recalls = np.load(os.path.join(run_dir, 'recalls.npy'))
-        self.plot_recall_histogram(recalls, os.path.join(run_dir, 'recall_histogram.png'))
+        with open(os.path.join(run_dir, "metadata.json"), "r") as f:
+            metadata = json.load(f)
+        self.plot_recall_histogram(recalls, os.path.join(run_dir, 'recall_histogram.png'), metadata)
     
-    def plot_recall_histogram(self, recalls, save_path):
-        plt.figure(figsize=(10, 6))
+    def plot_recall_histogram(self, recalls, save_path, metadata):
+        fig, ax = plt.subplots(figsize=(10, 6))
         sns.set_theme(style="whitegrid")
         
         sns.histplot(
@@ -332,6 +312,20 @@ class ANNBenchmarkPlotter:
             color="skyblue", 
             edgecolor="white",
             stat="percent"
+        )
+
+        index_name = metadata['index_name']
+        ds_name = metadata['dataset_name']
+
+        info_text = f"Dataset: {ds_name}\nIndex: {index_name}"
+        
+        ax.text(
+            0.05, 0.95, info_text, 
+            transform=ax.transAxes, 
+            fontsize=10,
+            verticalalignment='top', 
+            horizontalalignment='left',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8, edgecolor='lightgray')
         )
         
         plt.title("Distribution of Query Recalls", fontsize=14, pad=15)
@@ -349,24 +343,38 @@ class ANNBenchmarkPlotter:
     def load_and_plot_recall_latency(self, run_dir):
         recalls = np.load(os.path.join(run_dir, 'recalls.npy'))
         latencies = np.load(os.path.join(run_dir, 'latencies.npy'))
-        self.plot_recall_latency_hexbin(recalls, latencies, os.path.join(run_dir, 'recall_latency_hexbin.png'))
+        with open(os.path.join(run_dir, "metadata.json"), "r") as f:
+            metadata = json.load(f)
+        self.plot_recall_latency_hexbin(recalls, latencies, os.path.join(run_dir, 'recall_latency_hexbin.png'), metadata)
 
-    def plot_recall_latency_hexbin(self, recalls, latencies, save_path):
-        latencies_ms = np.asarray(latencies) * 1000
-        
+    def plot_recall_latency_hexbin(self, recalls, latencies, save_path, metadata):
         fig, ax = plt.subplots(figsize=(8, 6))
         
         hb = ax.hexbin(
             recalls, 
-            latencies_ms, 
+            latencies, 
             gridsize=10, 
             cmap='YlGnBu', 
             mincnt=1
         )
+
+        index_name = metadata['index_name']
+        ds_name = metadata['dataset_name']
+
+        info_text = f"Dataset: {ds_name}\nIndex: {index_name}"
+        
+        ax.text(
+            0.05, 0.95, info_text, 
+            transform=ax.transAxes, 
+            fontsize=10,
+            verticalalignment='top', 
+            horizontalalignment='left',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8, edgecolor='lightgray')
+        )
         
         ax.set_title('Recall vs Latency Density', fontsize=14, pad=15)
         ax.set_xlabel('Recall', fontsize=12)
-        ax.set_ylabel('Latency (ms)', fontsize=12)
+        ax.set_ylabel('Latency (s)', fontsize=12)
         ax.grid(True, linestyle='--', alpha=0.5)
 
         cb = fig.colorbar(hb, ax=ax)
@@ -385,9 +393,11 @@ class ANNBenchmarkPlotter:
         selectivities = np.load(selectivity_path)
         metadata = self._load_run_data(run_dir.removeprefix(str(self.log_root)+'/'))
         selectivities = selectivities / metadata['base_count']
-        self.plot_selectivity_avg_recall(selectivities, recalls,  os.path.join(run_dir, 'selectivity_avg_recall.png'))
+        with open(os.path.join(run_dir, "metadata.json"), "r") as f:
+            metadata = json.load(f)
+        self.plot_selectivity_avg_recall(selectivities, recalls,  os.path.join(run_dir, 'selectivity_avg_recall.png'), metadata)
 
-    def plot_selectivity_avg_recall(self, selectivities, recalls, save_path, num_grid_points=200, win_size=50):
+    def plot_selectivity_avg_recall(self, selectivities, recalls, save_path, metadata, num_grid_points=200, win_size=50):
         grid_x = np.linspace(selectivities.min(), selectivities.max(), num_grid_points)
         grid_y = np.zeros_like(grid_x)
 
@@ -431,10 +441,24 @@ class ANNBenchmarkPlotter:
 
         ax.plot(grid_x, grid_y, color='crimson', linewidth=3)
         
-        ax.set_title('How Selectivity Affects Recall')
+        ax.set_title('Selectivity vs Recall')
         ax.set_xlabel('Selectivity')
         ax.set_ylabel('Recall')
         ax.set_ylim(-0.05, 1.05)
+
+        index_name = metadata['index_name']
+        ds_name = metadata['dataset_name']
+
+        info_text = f"Dataset: {ds_name}\nIndex: {index_name}"
+        
+        ax.text(
+            0.05, 0.95, info_text, 
+            transform=ax.transAxes, 
+            fontsize=10,
+            verticalalignment='top', 
+            horizontalalignment='left',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8, edgecolor='lightgray')
+        )
 
         output_dir = os.path.dirname(save_path)
         if output_dir:
@@ -449,9 +473,11 @@ class ANNBenchmarkPlotter:
         selectivities = np.load(selectivity_path)
         metadata = self._load_run_data(run_dir.removeprefix(str(self.log_root)+'/'))
         selectivities = selectivities / metadata['base_count']
-        self.plot_selectivity_avg_latency(selectivities, latencies,  os.path.join(run_dir, 'selectivity_avg_latency.png'))
+        with open(os.path.join(run_dir, "metadata.json"), "r") as f:
+            metadata = json.load(f)
+        self.plot_selectivity_avg_latency(selectivities, latencies,  os.path.join(run_dir, 'selectivity_avg_latency.png'), metadata)
 
-    def plot_selectivity_avg_latency(self, selectivities, latencies, save_path, num_grid_points=200, win_size=50):
+    def plot_selectivity_avg_latency(self, selectivities, latencies, save_path, metadata, num_grid_points=200, win_size=50):
         grid_x = np.geomspace(selectivities.min(), selectivities.max(), num_grid_points)
         grid_y = np.zeros_like(grid_x)
 
@@ -495,9 +521,23 @@ class ANNBenchmarkPlotter:
 
         ax.plot(grid_x, grid_y, color='crimson', linewidth=3)
         
-        ax.set_title('How Selectivity Affects Latency')
+        ax.set_title('Selectivity vs Latency')
         ax.set_xlabel('Selectivity')
-        ax.set_ylabel('Latency')
+        ax.set_ylabel('Latency (s)')
+
+        index_name = metadata['index_name']
+        ds_name = metadata['dataset_name']
+
+        info_text = f"Dataset: {ds_name}\nIndex: {index_name}"
+        
+        ax.text(
+            0.05, 0.95, info_text, 
+            transform=ax.transAxes, 
+            fontsize=10,
+            verticalalignment='top', 
+            horizontalalignment='left',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.8, edgecolor='lightgray')
+        )
 
         output_dir = os.path.dirname(save_path)
         if output_dir:

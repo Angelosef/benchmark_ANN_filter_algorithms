@@ -1,8 +1,8 @@
 g++ -O3 -Wall -shared -std=c++17 -fPIC \
 $(python3 -m pybind11 --includes) \
 -I. \
--I/home/angelos/projects/filter_ann/benchmark_ANN_filter_algorithms/ACORN \
+-I/home/angelos/subjects/diplomatiki/repo/benchmark_ANN_filter_algorithms/ACORN \
 acorn_wrapper.cpp \
 -o acorn$(python3-config --extension-suffix) \
-/home/angelos/projects/filter_ann/benchmark_ANN_filter_algorithms/ACORN/build_static/faiss/libfaiss.a \
+/home/angelos/subjects/diplomatiki/repo/benchmark_ANN_filter_algorithms/ACORN/build_static/faiss/libfaiss.a \
 -fopenmp

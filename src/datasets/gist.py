@@ -16,7 +16,7 @@ class gistDataset(Dataset):
         # folows zipfian distribution
         self.a = 0.8
         self.max_prob = 0.5
-        self.tags_count = 1000
+        self.tags_count = 500
     
     def get_config(self):
         return Config("sparse", "conjunction")

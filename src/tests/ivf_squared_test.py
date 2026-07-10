@@ -6,7 +6,7 @@ from src.algorithms.ivf_squared import IVFSquared, IVFSquaredBuildParameters, IV
 from src.logger import BenchmarkLogger
 
 if __name__=="__main__":
-    test_yfcc = True
+    test_yfcc = False
     test_gist = True
 
     if test_yfcc:
@@ -35,7 +35,7 @@ if __name__=="__main__":
             
         print("running ivf-squared on gist dataset")
         
-        subset_size = 0.1
+        subset_size = 1.0
         k = 10
     
         dataset = gistDataset(subset_size, k)

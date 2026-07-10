@@ -11,10 +11,10 @@ class dummy:
         pass
 
 if __name__=="__main__":
-    test_sift = True
+    test_sift = False
     test_glove = True
-    test_yfcc = True
-    test_gist = True
+    test_yfcc = False
+    test_gist = False
 
     if test_sift:
         print("running brute force on sift dataset")

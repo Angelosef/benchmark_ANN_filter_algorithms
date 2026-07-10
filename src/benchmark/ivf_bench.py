@@ -74,10 +74,10 @@ def bench_gist():
 
 
 if __name__=="__main__":
-    test_sift = False
-    test_glove = False
+    test_sift = True
+    test_glove = True
     test_yfcc = True
-    test_gist = False
+    test_gist = True
 
     if test_sift:
         

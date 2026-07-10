@@ -17,7 +17,7 @@ if __name__=="__main__":
         k = 10
         
         dataset = siftDataset(subset_size, k)
-        print("running IVF on sift dataset")
+        print("running HNSW on sift dataset")
         for num_restrictions in range(1, 4):
             print("num_restr = ", num_restrictions)
             
@@ -40,7 +40,7 @@ if __name__=="__main__":
         k = 10
 
         dataset = GloVeDataset(subset_size, k)
-        print("running IVF on glove dataset")
+        print("running HNSW on glove dataset")
         build_params = HNSWPostfilterBuildParameters(graph_degree=16, efConstruction=100)
         query_params = HNSWPostfilterQueryParameters(efSearch=100, initial_k=200)
 
@@ -60,7 +60,7 @@ if __name__=="__main__":
         k = 10
 
         dataset = yfccDataset(subset_size, k)
-        print("running IVF on yfcc dataset")
+        print("running HNSW on yfcc dataset")
         build_params = HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)
         query_params = HNSWPostfilterQueryParameters(efSearch=100, initial_k=200)
         print("initializing benchmark")
@@ -75,11 +75,11 @@ if __name__=="__main__":
         print("recall = ", recall)
     
     if test_gist:
-        subset_size = 0.1
+        subset_size = 1.0
         k = 10
 
         dataset = gistDataset(subset_size, k)
-        print("running IVF on gist dataset")
+        print("running HNSW on gist dataset")
         build_params = HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)
         query_params = HNSWPostfilterQueryParameters(efSearch=100, initial_k=200)
         print("initializing benchmark")

@@ -6,14 +6,14 @@ from src.datasets.gist import gistDataset
 import numpy as np
 
 if __name__ == '__main__':
-    test_sift = False
+    test_sift = True
     test_glove = True
-    test_yfcc = False
-    test_gist = False
+    test_yfcc = True
+    test_gist = True
     
     if test_sift:
         # --- SIFT ---
-        dataset = siftDataset(subset_size=0.1)
+        dataset = siftDataset(subset_size=1.0)
         dataset.prepare()
         restr_count = 2
         
@@ -33,7 +33,7 @@ if __name__ == '__main__':
 
     if test_glove:
         # --- GloVe ---
-        dataset = GloVeDataset(subset_size=0.1)
+        dataset = GloVeDataset(subset_size=1.0)
         dataset.prepare()
         dataset.inspect_data(
             dataset.get_base_vectors(), 
