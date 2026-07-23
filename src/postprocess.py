@@ -2,14 +2,9 @@ import os
 from src.logger import BenchmarkLogger
 from src.plotter import ANNBenchmarkPlotter
 
-import src.datasets.all_datasets
-from src.datasets.base_dataset import Dataset
+from src.utils import find_selectivity_path
 import json
 
-def find_selectivity_path(ds_name, subset_size, neighbors_retrieved, query_param=None):
-    cls_name = Dataset.get_dataset_class(ds_name)
-    ds = cls_name(subset_size, neighbors_retrieved)
-    return ds.get_selectivity_path(query_param)
 
 if __name__ == "__main__":
     logger = BenchmarkLogger()
@@ -22,7 +17,7 @@ if __name__ == "__main__":
             if os.path.isdir(os.path.join(target_dir, name))
     ]
 
-    # run_dirs = ['logs/HNSWPostfilter_YFCC_20260610-232410']
+    # run_dirs = ['logs/Acorn_YFCC_20260722-232759']
 
     for run_directory in run_dirs:
         logger.log_recall(run_directory)

@@ -1,15 +1,14 @@
 from src.benchmark.benchmarkRunner import BenchmarkRunner
-from src.datasets.sift import siftDataset
-from src.datasets.glove import GloVeDataset
-from src.datasets.yfcc import yfccDataset
+from src.datasets.all_datasets import *
 from src.algorithms.acorn import Acorn, AcornBuildParameters, AcornQueryParameters
 from src.logger import BenchmarkLogger
 
 
 if __name__=="__main__":
-    test_sift = True
+    test_sift = False
     test_glove = True
     test_yfcc = False
+    test_gist = False
 
     if test_sift:
         subset_size = 0.1
@@ -20,8 +19,8 @@ if __name__=="__main__":
         for num_restrictions in range(1, 4):
             print("num_restr = ", num_restrictions)
             
-            build_params = AcornBuildParameters(M=32, gamma=12, M_beta=32)
-            query_params = AcornQueryParameters(efSearch=10)
+            build_params = AcornBuildParameters(M=16, gamma=12, M_beta=32, efConstruction=16)
+            query_params = AcornQueryParameters(efSearch=32)
     
             print("initializing benchmark")
             runner = BenchmarkRunner(dataset, num_restrictions, Acorn, build_params, query_params)
@@ -40,8 +39,8 @@ if __name__=="__main__":
 
         dataset = GloVeDataset(subset_size, k)
         print("running Acorn on glove dataset")
-        build_params = AcornBuildParameters(M=32, gamma=12, M_beta=32)
-        query_params = AcornQueryParameters(efSearch=100)
+        build_params = AcornBuildParameters(M=8, gamma=36, M_beta=32, efConstruction=36)
+        query_params = AcornQueryParameters(efSearch=32)
 
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, Acorn, build_params, query_params)
@@ -61,8 +60,8 @@ if __name__=="__main__":
         dataset = yfccDataset(subset_size, k)
         dataset.prepare()
         print("running Acorn on yfcc dataset")
-        build_params = AcornBuildParameters(M=64, gamma=24, M_beta=64, num_bins=500)
-        query_params = AcornQueryParameters(efSearch=100)
+        build_params = AcornBuildParameters(M=3, gamma=12, M_beta=32, efConstruction=8)
+        query_params = AcornQueryParameters(efSearch=46)
 
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, Acorn, build_params, query_params)
@@ -74,3 +73,23 @@ if __name__=="__main__":
         run_path = logger.log_benchmark(metadata, D, I, L)
         recall = logger.log_recall(run_path)
         print("recall = ", recall)
+
+    if test_gist:
+            subset_size = 1.0
+            k = 10
+    
+            dataset = gistDataset(subset_size, k)
+            print("running Acorn on gist dataset")
+            build_params = AcornBuildParameters(M=16, gamma=12, M_beta=32, efConstruction=16)
+            query_params = AcornQueryParameters(efSearch=32)
+    
+            print("initializing benchmark")
+            runner = BenchmarkRunner(dataset, None, Acorn, build_params, query_params)
+            print("running benchmark")
+            D, I, L, metadata = runner.run()
+    
+            print("logging results")
+            logger = BenchmarkLogger()
+            run_path = logger.log_benchmark(metadata, D, I, L)
+            recall = logger.log_recall(run_path)
+            print("recall = ", recall)

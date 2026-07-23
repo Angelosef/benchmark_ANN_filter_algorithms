@@ -9,9 +9,9 @@ from src.logger import BenchmarkLogger
 
 if __name__=="__main__":
     test_sift = False
-    test_glove = False
+    test_glove = True
     test_yfcc = False
-    test_gist = True
+    test_gist = False
 
     if test_sift:
         subset_size = 0.1
@@ -43,7 +43,7 @@ if __name__=="__main__":
         dataset = GloVeDataset(subset_size, k)
         print("running IVF on glove dataset")
         build_params = IVFIdFilterBuildParameters(nlist=100)
-        query_params = IVFIdFilterQueryParameters(nprobe=20)
+        query_params = IVFIdFilterQueryParameters(nprobe=10)
 
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, IVFIdFilter, build_params, query_params)

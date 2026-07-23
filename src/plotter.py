@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 import numpy as np
+from src.utils import find_selectivity_path
 
 class ANNBenchmarkPlotter:
     def __init__(self, log_root_dir, output_dir="plots"):
@@ -48,6 +49,83 @@ class ANNBenchmarkPlotter:
                 run_details.append(details)
         
         return pd.DataFrame(run_details)
+    
+    def _prepare_selectivity_df(self, dataset_name, subset_size, neighbors_retrieved, ds_query_param):
+        """Joins registry with JSON details into a single DataFrame."""
+        registry = pd.read_csv(self.registry_path)
+        sel_path = find_selectivity_path(dataset_name, subset_size, neighbors_retrieved, ds_query_param)
+        selectivities = np.load(sel_path)
+
+        # Filter for the specific dataset and subset
+        mask = (registry['dataset'] == dataset_name) & \
+           (registry['subset_size'] == subset_size)
+    
+        if ds_query_param is not None:
+            mask &= (registry['ds_query_param'] == ds_query_param)
+        
+        filtered = registry[mask]
+
+        run_id = filtered['run_id'].iloc[0]
+        details = self._load_run_data(run_id)
+
+        selectivities = selectivities / details['base_count']
+        sel_bucket_points = np.geomspace(np.min(selectivities), np.max(selectivities), 5)
+        
+        
+        run_details = []
+        for run_id in filtered['run_id']:
+            
+            for i in range(len(sel_bucket_points)-1):
+                min_sel = sel_bucket_points[i]
+                max_sel = sel_bucket_points[i+1]
+                query_indexes = np.where((selectivities >= min_sel) & (selectivities <= max_sel))[0]
+                
+                recalls = np.load(os.path.join(self.log_root, run_id, "recalls.npy"))
+                recalls = recalls[query_indexes]
+
+                latencies = np.load(os.path.join(self.log_root, run_id, "latencies.npy"))
+                latencies = latencies[query_indexes]
+                
+                details = self._load_run_data(run_id)
+                details["min_selectivity"] = min_sel
+                details["max_selectivity"] = max_sel
+
+                details["avg_recall"] = np.mean(recalls)
+                details["std_recall"] = np.std(recalls)
+                details["p2_recall"] = np.percentile(recalls, 2)
+                details["p5_recall"] = np.percentile(recalls, 5)
+                details["p25_recall"] = np.percentile(recalls, 25)
+                details["p50_recall"] = np.percentile(recalls, 50)
+                details["p75_recall"] = np.percentile(recalls, 75)
+                details["p95_recall"] = np.percentile(recalls, 95)
+                details["p98_recall"] = np.percentile(recalls, 98)
+
+                details["avg_latency"] = np.mean(latencies)
+                details["p2_latency"] = np.percentile(latencies, 2)
+                details["p5_latency"] = np.percentile(latencies, 5)
+                details["p25_latency"] = np.percentile(latencies, 25)
+                details["p50_latency"] = np.percentile(latencies, 50)
+                details["p75_latency"] = np.percentile(latencies, 75)
+                details["p95_latency"] = np.percentile(latencies, 95)
+                details["p98_latency"] = np.percentile(latencies, 98)
+
+                run_details.append(details)
+        
+        return pd.DataFrame(run_details)
+    
+    def plot_selectivity_based_performance(self, dataset_name, subset_size, neighbors_retrieved, ds_query_param):
+        df = self._prepare_selectivity_df(dataset_name, subset_size, neighbors_retrieved, ds_query_param)
+
+        if df.empty:
+            print(f"No data found for {dataset_name} with subset {subset_size} and param {ds_query_param}.")
+            return
+
+        p_suffix = f"_p{ds_query_param}" if ds_query_param is not None else ""
+
+        for (min_sel, max_sel), group in df.groupby(["min_selectivity", "max_selectivity"]):
+            self.plot_recall_vs_latency(group, dataset_name, subset_size, p_suffix, min_sel, max_sel)
+        
+        print(f"Done! Plots saved in: {self.output_dir}")
 
     def plot_recall_vs_total_latency(self, df, dataset_name, subset_size, ds_query_param):
         """Creates the Recall/Latency trade-off curve."""
@@ -83,7 +161,7 @@ class ANNBenchmarkPlotter:
         
         plt.yscale('log')
         plt.title(f"Recall vs Query Latency ({dataset_name} - {subset_size} - {ds_query_param})")
-        plt.xlabel("Recall (Higher is better)")
+        plt.xlabel("Recall")
         plt.ylabel("Total Latency (seconds, Log Scale)")
         plt.grid(True, which="both", ls="-", alpha=0.5)
         
@@ -91,7 +169,7 @@ class ANNBenchmarkPlotter:
         plt.savefig(fname, bbox_inches='tight')
         plt.close()
     
-    def plot_recall_vs_latency(self, df, dataset_name, subset_size, ds_query_param):
+    def plot_recall_vs_latency(self, df, dataset_name, subset_size, ds_query_param, min_sel=0.0, max_sel=1.0):
         """Recall vs latency Pareto frontier with percentile crosses."""
 
         plt.figure(figsize=(10, 6))
@@ -171,20 +249,23 @@ class ANNBenchmarkPlotter:
             )
 
         plt.yscale("log")
-
+        title_sel_part = 'all queries'
+        if min_sel != 0.0 or max_sel != 1.0:
+            title_sel_part = f'selectivity range: ({min_sel:.4f}, {max_sel:.4f})'
+            
         plt.title(
             f"Recall vs Query Latency "
-            f"({dataset_name} - {subset_size} - {ds_query_param})"
+            f"({dataset_name} -  {ds_query_param}) - {title_sel_part}"
         )
 
         plt.xlabel("Recall")
-        plt.ylabel("Latency (seconds, log scale)")
+        plt.ylabel("Latency Per Query (s)")
 
         plt.grid(True, which="both", alpha=0.4)
 
         fname = (
             self.output_dir
-            / f"{dataset_name}_{subset_size}_{ds_query_param}_recall_latency.png"
+            / f"{dataset_name}_{subset_size}_{ds_query_param}_{min_sel:.4f}_{max_sel:.4f}_recall_latency.png"
         )
 
         plt.savefig(fname, bbox_inches="tight")
@@ -226,8 +307,8 @@ class ANNBenchmarkPlotter:
         
         plt.yscale('log')
         plt.title(f"Recall vs qps ({dataset_name} - {subset_size} - {ds_query_param})", fontsize=14, pad=15)
-        plt.xlabel("Recall (Higher is better)", fontsize=12)
-        plt.ylabel("Queries per Second (Log Scale)", fontsize=12)
+        plt.xlabel("Recall", fontsize=12)
+        plt.ylabel("Queries per Second", fontsize=12)
         plt.grid(True, which="both", ls="-", alpha=0.3)
         
         plt.xlim(-0.02, 1.02)

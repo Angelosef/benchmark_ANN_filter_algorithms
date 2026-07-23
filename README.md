@@ -34,8 +34,9 @@ conda activate ann_bench
 
 This benchmark utilizes specialized C++ implementations. You must follow the build instructions within the respective submodules to compile the source code:
 
-  * **ACORN**: High-performance filtered HNSW.
-  * **IVF-Squared**: Inverted file structures pointing at vamana-indices.
+  * **ACORN**: High-performance filtered HNSW. Compiled following the instructions of the faiss library.
+  * **IVF-Squared**: Inverted file structures pointing at vamana-indices. Compiled following the instructions
+  of the ParlayANN library.
 
 -----
 
@@ -94,7 +95,14 @@ Execute the benchmarking script for a specific algorithm:
 python -m src.benchmark.[algorithm_name]_bench
 ```
 
-**3. Visualization**
+**3. Postprocessing**
+Generate additional data using the raw log - data. Also creates plots to visualize the data in the `/logs` folder.
+
+```bash
+python -m src.postprocess
+```
+
+**4. Visualization**
 Generate performance plots (e.g., Recall vs. Latency curves):
 
 ```bash
@@ -123,7 +131,7 @@ The build time + index memory plots
 ## Computing Setup
 
   * **Hardware Constraints**: Benchmarking was performed on a consumer-grade setup
-  (CPU: intel core i5 - 2.9GHz - 6 cores, 16GB RAM) via WSL2/Windows10.
+  (CPU: intel core i5 - 2.9GHz - 6 cores, 16GB RAM) using OS: Ubuntu 26.04 LTS.
   
 -----
 

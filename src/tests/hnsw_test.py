@@ -7,10 +7,10 @@ from src.algorithms.hnsw_postfilter import HNSWPostfilter, HNSWPostfilterBuildPa
 from src.logger import BenchmarkLogger
 
 if __name__=="__main__":
-    test_sift = True
+    test_sift = False
     test_glove = True
-    test_yfcc = True
-    test_gist = True
+    test_yfcc = False
+    test_gist = False
 
     if test_sift:
         subset_size = 0.1
