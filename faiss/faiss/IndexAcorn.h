@@ -37,9 +37,9 @@ struct IndexAcorn : Index {
 
     void add(idx_t n, const float* x) override;
 
-    void addSingle(idx_t index, const float* vec);
+    void addSingle(idx_t index, const float* vec, std::mt19937& rng);
 
-    int assignLayer();
+    int assignLayer(std::mt19937& rng) const;
 
     void reset() override;
 

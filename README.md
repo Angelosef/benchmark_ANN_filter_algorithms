@@ -118,12 +118,12 @@ The plots will show the following metrics (this is a sample from the plots that 
 
 The recall vs latency plots:
 
-![Alt Text](sampled_plots/SIFT_1.0__p2_recall_latency.png)
+![Alt Text](sampled_plots/GIST_1.0__0.0023_0.0342_recall_latency.png)
 
 
 The build time + index memory plots
 
-![Alt Text](sampled_plots/SIFT_1.0__p2_resources.png)
+![Alt Text](sampled_plots/GIST_1.0__resources.png)
 
 
 -----
@@ -137,6 +137,6 @@ The build time + index memory plots
 
 ## References & Acknowledgments
 
-  * **ACORN**: [Paper (ACM)](https://dl.acm.org/doi/10.1145/3654923) | [Source Code](https://github.com/guestrin-lab/ACORN.git)
+  * **ACORN**: [Paper (ACM)](https://dl.acm.org/doi/10.1145/3654923)
   * **IVF-Squared/ParlayANN**: [Paper (OpenReview)](https://openreview.net/pdf/8213f79ab3761a0647dbcfea17c73677712ea59c.pdf) | [Source Code](https://github.com/cmuparlay/ParlayANN.git)
   * **Datasets**: Acknowledgement to the maintainers of the SIFT, GIST, GloVe, and YFCC datasets for providing standard vectors for the ANN community.

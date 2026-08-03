@@ -34,12 +34,12 @@ if __name__=="__main__":
             print("recall = ", recall)
 
     if test_glove:
-        subset_size = 0.1
+        subset_size = 1.0
         k = 10
 
         dataset = GloVeDataset(subset_size, k)
         print("running Acorn on glove dataset")
-        build_params = AcornBuildParameters(M=8, gamma=36, M_beta=32, efConstruction=36)
+        build_params = AcornBuildParameters(M=16, gamma=32, M_beta=32, efConstruction=200)
         query_params = AcornQueryParameters(efSearch=32)
 
         print("initializing benchmark")

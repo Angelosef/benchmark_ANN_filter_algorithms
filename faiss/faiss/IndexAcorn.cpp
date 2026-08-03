@@ -11,6 +11,8 @@
 #include <queue>
 #include <unordered_set>
 
+#include <omp.h>
+
 namespace faiss {
 
 IndexAcorn::IndexAcorn(
@@ -72,11 +74,29 @@ idx_t IndexAcorn::getFurthest(
 
 void IndexAcorn::add(idx_t n, const float* x) {
     idx_t offset = this->storage.ntotal;
-    for (idx_t i = 0; i < n; i++) {
-        this->addSingle(offset + i, x + i * this->d);
+    this->storage.add(n, x);
+
+#pragma omp parallel
+    {
+        // Thread-local RNG to avoid contention/data races on this->rng
+        std::mt19937 local_rng(42 + omp_get_thread_num());
+
+#pragma omp for schedule(dynamic, 100)
+        for (idx_t i = 0; i < n; i++) {
+            /*
+            if (i % 100 == 0) {
+                std::cout << "adding node of index " << i << std::endl;
+            }
+            */
+
+            idx_t index = offset + i;
+            const float* vec = x + i * this->d;
+
+            this->addSingle(index, vec, local_rng);
+        }
     }
+
     this->ntotal = this->storage.ntotal;
-    // this->graph.print();
 }
 
 bool IndexAcorn::addEdgeConditionally(
@@ -86,35 +106,40 @@ bool IndexAcorn::addEdgeConditionally(
     if (new_node == candidate_node) {
         return false;
     }
-    const std::vector<idx_t>& current_neighbours =
+
+    // 1. Snapshot neighbors for distance checking
+    const std::vector<idx_t> current_neighbours =
             this->graph.getNeighbors(layer, candidate_node);
 
+    size_t max_allowed = static_cast<size_t>(this->M * this->gamma);
+
+    // If candidate has space, try adding directly
+    if (current_neighbours.size() < max_allowed) {
+        return this->graph.tryReplaceEdge(
+                layer, candidate_node, -1, new_node, max_allowed);
+    }
+
+    // 2. Find furthest node on snapshot
     std::vector<idx_t> candidates = current_neighbours;
     candidates.push_back(new_node);
 
     idx_t furthest_node = this->getFurthest(layer, candidates, candidate_node);
 
-    if (current_neighbours.size() <
-        static_cast<size_t>(this->M * this->gamma)) {
-        this->graph.addEdge(layer, new_node, candidate_node);
-        return true;
-    } else if (furthest_node != new_node) {
-        // Prune the worst edge and replace it with new_node
-        this->graph.removeEdge(layer, candidate_node, furthest_node);
-        this->graph.addEdge(layer, new_node, candidate_node);
-        return true;
+    // If new_node is the furthest, we don't add it
+    if (furthest_node == new_node) {
+        return false;
     }
 
-    return false;
+    // 3. Atomically attempt replacement with validation inside the lock
+    return this->graph.tryReplaceEdge(
+            layer, candidate_node, furthest_node, new_node, max_allowed);
 }
 
-void IndexAcorn::addSingle(idx_t index, const float* vec) {
-    //    this->graph.print();
+void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
     bool build_phase = true;
-    this->storage.add(1, vec);
     int max_layer = this->graph.getMaxLayer();
 
-    int assigned_layer = this->assignLayer();
+    int assigned_layer = this->assignLayer(rng);
     idx_t new_node = this->graph.addNode(assigned_layer, index);
 
     idx_t entry_node = this->graph.getEntryPoint();
@@ -130,8 +155,11 @@ void IndexAcorn::addSingle(idx_t index, const float* vec) {
 
     for (int layer = std::min(max_layer, assigned_layer); layer > -1;
          layer -= 1) {
+        int active_ef = this->efConstruction;
+        if (layer == 0)
+            active_ef = active_ef / 2;
         std::vector<idx_t> results = this->searchLayer(
-                layer, entry_node, vec, this->efConstruction, build_phase);
+                layer, entry_node, vec, active_ef, build_phase);
         entry_node = this->graph.getDownwardsNode(layer, results[0]);
 
         // add edges
@@ -160,13 +188,15 @@ void IndexAcorn::addSingle(idx_t index, const float* vec) {
                            (this->M * this->gamma - added_count) &&
                    i < results.size()) {
                 idx_t candidate_node = results[i];
-                if (dynamic_neighbours.count(candidate_node) > 0)
+                if (dynamic_neighbours.count(candidate_node) > 0) {
+                    i++;
                     continue;
+                }
 
                 bool added = this->addEdgeConditionally(
                         layer, new_node, candidate_node);
                 if (added) {
-                    const std::vector<idx_t>& two_hop_neighbours =
+                    const std::vector<idx_t> two_hop_neighbours =
                             this->graph.getNeighbors(0, candidate_node);
                     dynamic_neighbours.insert(candidate_node);
                     for (idx_t node : two_hop_neighbours) {
@@ -179,10 +209,9 @@ void IndexAcorn::addSingle(idx_t index, const float* vec) {
     }
 }
 
-int IndexAcorn::assignLayer() {
-    double uniform_variable =
-            static_cast<double>(this->rng() - this->rng.min()) /
-            static_cast<double>(this->rng.max() - this->rng.min());
+int IndexAcorn::assignLayer(std::mt19937& rng) const {
+    double uniform_variable = static_cast<double>(rng() - rng.min()) /
+            static_cast<double>(rng.max() - rng.min());
 
     if (uniform_variable == 0.0) {
         uniform_variable = 1e-9;
@@ -270,7 +299,7 @@ std::vector<idx_t> IndexAcorn::searchLayer(
             break;
         }
 
-        const std::vector<idx_t>& neighbours =
+        const std::vector<idx_t> neighbours =
                 this->graph.getNeighbors(layer, frontier_node);
 
         // Process 1-hop neighbors
@@ -297,7 +326,7 @@ std::vector<idx_t> IndexAcorn::searchLayer(
                 idx_t one_hop_node = neighbours[i];
 
                 // Zero-copy reference to 2-hop neighbors
-                const std::vector<idx_t>& two_hop_neighbours =
+                const std::vector<idx_t> two_hop_neighbours =
                         this->graph.getNeighbors(layer, one_hop_node);
 
                 for (idx_t node : two_hop_neighbours) {
