@@ -65,8 +65,13 @@ struct IndexAcorn : Index {
             idx_t entry_node,
             const float* vec,
             int results_size,
-            bool build_phase,
             const IDSelector* sel = nullptr) const;
+
+    std::vector<idx_t> searchLayerSafe(
+            int layer,
+            idx_t entry_node,
+            const float* vec,
+            int results_size) const;
 
     idx_t getFurthest(int layer, std::vector<idx_t> candidates, idx_t target);
 

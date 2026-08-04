@@ -32,12 +32,16 @@ struct HierarchicalGraph {
             idx_t node_to_add,
             size_t max_neighbors);
 
-    const std::vector<idx_t> getNeighbors(int layer, idx_t node) const;
+    const std::vector<idx_t>& getNeighbors(int layer, idx_t node) const;
+    const std::vector<idx_t> getNeighborsSafe(int layer, idx_t node) const;
     idx_t getIndex(int layer, idx_t node) const;
+    idx_t getIndexSafe(int layer, idx_t node) const;
     idx_t getDownwardsNode(int layer, idx_t node) const;
+    idx_t getDownwardsNodeSafe(int layer, idx_t node) const;
 
     int getEntryPoint() const;
     int getMaxLayer() const;
+    int getMaxLayerSafe() const;
 
     void clear();
     void print() const;

@@ -49,7 +49,7 @@ idx_t IndexAcorn::getFurthest(
     if (candidates.empty()) {
         return -1; // Guard against empty candidate lists
     }
-    idx_t target_index = this->graph.getIndex(layer, target);
+    idx_t target_index = this->graph.getIndexSafe(layer, target);
     const float* target_vec = this->storage.get_xb() + target_index * this->d;
 
     // Get distance computer from storage
@@ -59,10 +59,10 @@ idx_t IndexAcorn::getFurthest(
     dis->set_query(target_vec);
 
     idx_t furthest_node = candidates[0];
-    float max_dist = (*dis)(this->graph.getIndex(layer, candidates[0]));
+    float max_dist = (*dis)(this->graph.getIndexSafe(layer, candidates[0]));
 
     for (size_t i = 1; i < candidates.size(); ++i) {
-        float dist = (*dis)(this->graph.getIndex(layer, candidates[i]));
+        float dist = (*dis)(this->graph.getIndexSafe(layer, candidates[i]));
         if (dist > max_dist) {
             max_dist = dist;
             furthest_node = candidates[i];
@@ -109,7 +109,7 @@ bool IndexAcorn::addEdgeConditionally(
 
     // 1. Snapshot neighbors for distance checking
     const std::vector<idx_t> current_neighbours =
-            this->graph.getNeighbors(layer, candidate_node);
+            this->graph.getNeighborsSafe(layer, candidate_node);
 
     size_t max_allowed = static_cast<size_t>(this->M * this->gamma);
 
@@ -137,7 +137,7 @@ bool IndexAcorn::addEdgeConditionally(
 
 void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
     bool build_phase = true;
-    int max_layer = this->graph.getMaxLayer();
+    int max_layer = this->graph.getMaxLayerSafe();
 
     int assigned_layer = this->assignLayer(rng);
     idx_t new_node = this->graph.addNode(assigned_layer, index);
@@ -146,11 +146,12 @@ void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
 
     for (int layer = max_layer; layer > assigned_layer; layer -= 1) {
         std::vector<idx_t> results =
-                this->searchLayer(layer, entry_node, vec, 1, build_phase);
-        entry_node = this->graph.getDownwardsNode(layer, results[0]);
+                this->searchLayerSafe(layer, entry_node, vec, 1);
+        entry_node = this->graph.getDownwardsNodeSafe(layer, results[0]);
     }
-    for (int layer = this->graph.getMaxLayer(); layer > max_layer; layer -= 1) {
-        new_node = this->graph.getDownwardsNode(layer, new_node);
+    for (int layer = this->graph.getMaxLayerSafe(); layer > max_layer;
+         layer -= 1) {
+        new_node = this->graph.getDownwardsNodeSafe(layer, new_node);
     }
 
     for (int layer = std::min(max_layer, assigned_layer); layer > -1;
@@ -158,9 +159,9 @@ void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
         int active_ef = this->efConstruction;
         if (layer == 0)
             active_ef = active_ef / 2;
-        std::vector<idx_t> results = this->searchLayer(
-                layer, entry_node, vec, active_ef, build_phase);
-        entry_node = this->graph.getDownwardsNode(layer, results[0]);
+        std::vector<idx_t> results =
+                this->searchLayerSafe(layer, entry_node, vec, active_ef);
+        entry_node = this->graph.getDownwardsNodeSafe(layer, results[0]);
 
         // add edges
         if (layer > 0) {
@@ -170,7 +171,7 @@ void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
                 this->addEdgeConditionally(layer, new_node, candidate_node);
             }
 
-            new_node = this->graph.getDownwardsNode(layer, new_node);
+            new_node = this->graph.getDownwardsNodeSafe(layer, new_node);
         } else if (layer == 0) {
             int added_count = 0;
             for (int i = 0; i < this->Mbeta && i < results.size(); i++) {
@@ -197,7 +198,7 @@ void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
                         layer, new_node, candidate_node);
                 if (added) {
                     const std::vector<idx_t> two_hop_neighbours =
-                            this->graph.getNeighbors(0, candidate_node);
+                            this->graph.getNeighborsSafe(0, candidate_node);
                     dynamic_neighbours.insert(candidate_node);
                     for (idx_t node : two_hop_neighbours) {
                         dynamic_neighbours.insert(node);
@@ -266,7 +267,6 @@ std::vector<idx_t> IndexAcorn::searchLayer(
         idx_t entry_node,
         const float* vec,
         int results_size,
-        bool build_phase,
         const IDSelector* sel) const {
     std::unique_ptr<faiss::DistanceComputer> dis(
             this->storage.get_distance_computer());
@@ -299,15 +299,12 @@ std::vector<idx_t> IndexAcorn::searchLayer(
             break;
         }
 
-        const std::vector<idx_t> neighbours =
+        const std::vector<idx_t>& neighbours =
                 this->graph.getNeighbors(layer, frontier_node);
 
         // Process 1-hop neighbors
         int neighbour_count = 0;
         for (idx_t node : neighbours) {
-            if (neighbour_count >= this->M && build_phase && false) {
-                break;
-            }
             if ((!sel || sel->is_member(this->graph.getIndex(layer, node))) &&
                 visited.count(node) == 0) {
                 visited.insert(node);
@@ -326,16 +323,106 @@ std::vector<idx_t> IndexAcorn::searchLayer(
                 idx_t one_hop_node = neighbours[i];
 
                 // Zero-copy reference to 2-hop neighbors
-                const std::vector<idx_t> two_hop_neighbours =
+                const std::vector<idx_t>& two_hop_neighbours =
                         this->graph.getNeighbors(layer, one_hop_node);
 
                 for (idx_t node : two_hop_neighbours) {
-                    if (neighbour_count >= this->M && build_phase) {
-                        break;
-                    }
                     if ((!sel ||
                          sel->is_member(this->graph.getIndex(layer, node))) &&
                         visited.count(node) == 0) {
+                        visited.insert(node);
+                        float dist = (*dis)(this->graph.getIndex(layer, node));
+                        if (dist < results.max() ||
+                            results.size() < results_size) {
+                            results.push(node, dist);
+                            frontier.push({dist, node});
+                        }
+                    }
+                    neighbour_count++;
+                }
+            }
+        }
+    }
+
+    std::vector<idx_t> result_nodes;
+    result_nodes.reserve(results.size());
+
+    // Dummy buffer for pop_min
+    float dummy_dist = 0.0f;
+    while (results.size() > 0) {
+        result_nodes.push_back(results.pop_min(&dummy_dist));
+    }
+
+    return result_nodes;
+}
+
+std::vector<idx_t> IndexAcorn::searchLayerSafe(
+        int layer,
+        idx_t entry_node,
+        const float* vec,
+        int results_size) const {
+    std::unique_ptr<faiss::DistanceComputer> dis(
+            this->storage.get_distance_computer());
+
+    dis->set_query(vec);
+
+    MinimaxHeapT results(results_size);
+
+    // Min-Heap for greedy search (closest candidates popped first)
+    using DistNode = std::pair<float, idx_t>;
+    std::priority_queue<DistNode, std::vector<DistNode>, std::greater<DistNode>>
+            frontier;
+
+    std::unordered_set<idx_t> visited;
+
+    float entry_dist = (*dis)(this->graph.getIndexSafe(layer, entry_node));
+
+    results.push(entry_node, entry_dist);
+    visited.insert(entry_node);
+    frontier.push({entry_dist, entry_node});
+
+    while (!frontier.empty()) {
+        DistNode frontier_best = frontier.top();
+        frontier.pop();
+
+        float frontier_dist = frontier_best.first;
+        idx_t frontier_node = frontier_best.second;
+
+        if (results.size() == results_size && frontier_dist > results.max()) {
+            break;
+        }
+
+        const std::vector<idx_t> neighbours =
+                this->graph.getNeighborsSafe(layer, frontier_node);
+
+        // Process 1-hop neighbors
+        int neighbour_count = 0;
+        for (idx_t node : neighbours) {
+            if (visited.count(node) == 0) {
+                visited.insert(node);
+                float dist = (*dis)(this->graph.getIndexSafe(layer, node));
+                if (dist < results.max() || results.size() < results_size) {
+                    results.push(node, dist);
+                    frontier.push({dist, node});
+                }
+            }
+            neighbour_count++;
+        }
+
+        // Process 2-hop neighbors for ACORN layer 0
+        if (layer == 0) {
+            for (size_t i = this->Mbeta; i < neighbours.size(); ++i) {
+                idx_t one_hop_node = neighbours[i];
+
+                // Zero-copy reference to 2-hop neighbors
+                const std::vector<idx_t> two_hop_neighbours =
+                        this->graph.getNeighborsSafe(layer, one_hop_node);
+
+                for (idx_t node : two_hop_neighbours) {
+                    if (neighbour_count >= this->M) {
+                        break;
+                    }
+                    if (visited.count(node) == 0) {
                         visited.insert(node);
                         float dist = (*dis)(this->graph.getIndex(layer, node));
                         if (dist < results.max() ||
@@ -386,13 +473,13 @@ void IndexAcorn::searchSingle(
     }
 
     for (int layer = max_layer; layer > 0; layer -= 1) {
-        std::vector<idx_t> results = this->searchLayer(
-                layer, entry_node, q_vec, 1, build_phase, selector);
+        std::vector<idx_t> results =
+                this->searchLayer(layer, entry_node, q_vec, 1, selector);
         entry_node = this->graph.getDownwardsNode(layer, results[0]);
     }
 
-    std::vector<idx_t> final_candidates = this->searchLayer(
-            0, entry_node, q_vec, efSearch, build_phase, selector);
+    std::vector<idx_t> final_candidates =
+            this->searchLayer(0, entry_node, q_vec, efSearch, selector);
     std::unique_ptr<faiss::DistanceComputer> dis(
             this->storage.get_distance_computer());
 

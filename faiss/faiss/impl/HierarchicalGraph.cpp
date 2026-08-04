@@ -144,8 +144,9 @@ bool HierarchicalGraph::tryReplaceEdge(
     return modified;
 }
 
-const std::vector<idx_t> HierarchicalGraph::getNeighbors(int layer, idx_t node)
-        const {
+const std::vector<idx_t> HierarchicalGraph::getNeighborsSafe(
+        int layer,
+        idx_t node) const {
     omp_lock_t* lock =
             const_cast<omp_lock_t*>(&(this->node_locks[layer][node]));
 
@@ -156,15 +157,33 @@ const std::vector<idx_t> HierarchicalGraph::getNeighbors(int layer, idx_t node)
     return copy;
 }
 
-idx_t HierarchicalGraph::getIndex(int layer, idx_t node) const {
+const std::vector<idx_t>& HierarchicalGraph::getNeighbors(int layer, idx_t node)
+        const {
+    return this->graph[layer][node];
+}
+
+idx_t HierarchicalGraph::getIndexSafe(int layer, idx_t node) const {
     omp_lock_t* lock =
             const_cast<omp_lock_t*>(&(this->node_locks[layer][node]));
 
     omp_set_lock(lock);
-    idx_t index = this->indexes[layer][node];
+    idx_t index = this->getIndex(layer, node);
     omp_unset_lock(lock);
 
     return index;
+}
+
+idx_t HierarchicalGraph::getIndex(int layer, idx_t node) const {
+    return this->indexes[layer][node];
+}
+
+idx_t HierarchicalGraph::getDownwardsNodeSafe(int layer, idx_t node) const {
+    omp_set_lock(const_cast<omp_lock_t*>(&(this->expansion_lock)));
+
+    idx_t down_node = this->getDownwardsNode(layer, node);
+    omp_unset_lock(const_cast<omp_lock_t*>(&(this->expansion_lock)));
+
+    return down_node;
 }
 
 idx_t HierarchicalGraph::getDownwardsNode(int layer, idx_t node) const {
@@ -172,17 +191,12 @@ idx_t HierarchicalGraph::getDownwardsNode(int layer, idx_t node) const {
         return node;
     }
 
-    omp_set_lock(const_cast<omp_lock_t*>(&(this->expansion_lock)));
-
-    // Safety check against uninitialized downwards edges
     if (layer - 1 >= static_cast<int>(this->downwards_edges.size()) ||
         node >= static_cast<idx_t>(this->downwards_edges[layer - 1].size())) {
-        omp_unset_lock(const_cast<omp_lock_t*>(&(this->expansion_lock)));
         return node; // Fallback to avoid crash
     }
 
     idx_t down_node = this->downwards_edges[layer - 1][node];
-    omp_unset_lock(const_cast<omp_lock_t*>(&(this->expansion_lock)));
 
     return down_node;
 }
@@ -191,10 +205,16 @@ int HierarchicalGraph::getEntryPoint() const {
     return 0;
 }
 
-int HierarchicalGraph::getMaxLayer() const {
+int HierarchicalGraph::getMaxLayerSafe() const {
     omp_set_lock(const_cast<omp_lock_t*>(&(this->expansion_lock)));
-    int max_layer = static_cast<int>(this->graph.size()) - 1;
+    int max_layer = this->getMaxLayer();
     omp_unset_lock(const_cast<omp_lock_t*>(&(this->expansion_lock)));
+    return max_layer;
+}
+
+int HierarchicalGraph::getMaxLayer() const {
+    int max_layer = static_cast<int>(this->graph.size()) - 1;
+
     return std::max(0, max_layer);
 }
 
