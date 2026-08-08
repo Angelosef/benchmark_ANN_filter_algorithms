@@ -89,6 +89,7 @@ typedef uint64_t size_t;
 
 
 #include <faiss/IndexAcorn.h>
+#include <faiss/IndexIVFSquared.h>
 #include <faiss/IndexFlat.h>
 #include <faiss/VectorTransform.h>
 #include <faiss/IndexPreTransform.h>
@@ -604,6 +605,9 @@ void gpu_sync_all_devices()
 %include  <faiss/impl/InvertedListScannerStats.h>
 %include  <faiss/IndexIVF.h>
 %include <faiss/IndexAcorn.h>
+%rename(search_c) faiss::IndexIVFSquared::search;
+%include <faiss/IndexIVFSquared.h>
+
 // NOTE(hoss): SWIG (wrongly) believes the overloaded const version shadows the
 //   non-const one.
 %warnfilter(509) extract_index_ivf;
@@ -888,6 +892,7 @@ typedef int cudaDataType_t;
     DOWNCAST ( IndexIVFFlatDedup )
     DOWNCAST ( IndexIVFFlat )
     DOWNCAST ( IndexIVF )
+    DOWNCAST ( IndexIVFSquared )
     DOWNCAST ( IndexFlatIP )
     DOWNCAST ( IndexFlatIPPanorama )
     DOWNCAST ( IndexFlatL2 )

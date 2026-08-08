@@ -772,3 +772,73 @@ def unpack_bitstrings(b, M_or_nbits, nbit=None):
         a = np.empty((n, M), dtype="int32")
         unpack_bitstrings_c(n, M, nbit, swig_ptr(b), code_size, swig_ptr(a))
     return a
+
+# ----------------------------------------------------------------------
+# 1. SearchParametersIVFSquared Wrapper
+# ----------------------------------------------------------------------
+
+# Save original constructor to extend it
+_orig_SearchParametersIVFSquared_init = SearchParametersIVFSquared.__init__
+
+def _SearchParametersIVFSquared_init(self, *args, **kwargs):
+    _orig_SearchParametersIVFSquared_init(self, *args, **kwargs)
+    self._query_tags_ref = None  # Holds Python reference to prevent GC
+
+def _SearchParametersIVFSquared_set_query_tags(self, query_tags_array):
+    """
+    Sets query_tags using a NumPy array (dtype=int64 / idx_t).
+    Safe against Python garbage collection.
+    """
+    if query_tags_array is None:
+        self.query_tags = None
+        self._query_tags_ref = None
+        return
+
+    # Ensure array is contiguous and correct C++ idx_t type (int64)
+    tags_arr = np.ascontiguousarray(query_tags_array, dtype=np.int64)
+    
+    # Store reference on self to prevent memory deallocation during search
+    self._query_tags_ref = tags_arr
+    
+    # Pass raw memory pointer to SWIG struct member
+    self.query_tags = swig_ptr(tags_arr)
+
+SearchParametersIVFSquared.__init__ = _SearchParametersIVFSquared_init
+SearchParametersIVFSquared.set_query_tags = _SearchParametersIVFSquared_set_query_tags
+
+
+# ----------------------------------------------------------------------
+# 2. IndexIVFSquared Method Wrappers
+# ----------------------------------------------------------------------
+
+_orig_IndexIVFSquared_init = faiss.IndexIVFSquared.__init__
+
+def _IndexIVFSquared_init(self, d, cut_off=100, cluster_size=32, cut_off_tiny=20, cut_off_bitvector=1000, efConstruction=128, M=16):
+    _orig_IndexIVFSquared_init(
+        self, d, cut_off, cluster_size, cut_off_tiny, cut_off_bitvector, efConstruction, M
+    )
+
+faiss.IndexIVFSquared.__init__ = _IndexIVFSquared_init
+
+def _IndexIVFSquared_add_with_tags(self, x, tag_flat_array, tag_offsets):
+    x = np.ascontiguousarray(x, dtype=np.float32)
+    tag_flat_array = np.ascontiguousarray(tag_flat_array, dtype=np.int64)
+    tag_offsets = np.ascontiguousarray(tag_offsets, dtype=np.uint64)
+
+    n, d = x.shape
+    assert d == self.d, f"Dimension mismatch: Expected {self.d}, got {d}"
+
+    # ✅ 1. Correct tag count: len(offsets) - 1
+    # ✅ 2. Cast to native Python int so SWIG accepts argument 4 as faiss::idx_t
+    num_tags = int(len(tag_offsets) - 1)
+
+    self.add_tags_c(
+        n,
+        swig_ptr(x),
+        num_tags,
+        swig_ptr(tag_flat_array),
+        swig_ptr(tag_offsets)
+    )
+
+# Attach to IndexIVFSquared
+IndexIVFSquared.add_with_tags = _IndexIVFSquared_add_with_tags

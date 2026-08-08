@@ -90,6 +90,11 @@ endif()
 # =============================================================================
 
 set(FAISS_SRC
+  IndexIVFSquared.cpp
+  IndexHNSWShared.cpp
+  IndexIVFShared.cpp
+  IndexLargeLabelShared.cpp
+  IndexSmallLabelShared.cpp
   IndexAcorn.cpp
   AutoTune.cpp
   Clustering.cpp
@@ -224,6 +229,12 @@ if(FAISS_ENABLE_SVS)
 endif()
 
 set(FAISS_HEADERS
+  IndexIVFSquared.h
+  ISharedLabelIndex.h
+  IndexHNSWShared.h
+  IndexIVFShared.h
+  IndexLargeLabelShared.h
+  IndexSmallLabelShared.h
   IndexAcorn.h
   AutoTune.h
   Clustering.h
