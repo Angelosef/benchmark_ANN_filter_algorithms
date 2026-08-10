@@ -152,13 +152,7 @@ std::vector<idx_t> IndexIVFShared::get_candidates(
         }
     }
 
-    // Sort and deduplicate candidates to guarantee std::set_intersection works
-    // correctly
     std::sort(candidates.begin(), candidates.end());
-    candidates.erase(
-            std::unique(candidates.begin(), candidates.end()),
-            candidates.end());
-
     return candidates;
 }
 

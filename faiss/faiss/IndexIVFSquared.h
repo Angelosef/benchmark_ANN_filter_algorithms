@@ -7,6 +7,8 @@
 #ifndef SWIG
 #include <faiss/ISharedLabelIndex.h>
 #include <faiss/impl/HNSW.h>
+
+#include <faiss/IndexHNSWShared.h>
 #endif
 
 #include <memory>
@@ -56,7 +58,7 @@ struct IndexIVFSquared : Index {
     std::vector<std::vector<bool>> membership_bitvector;
     std::unordered_map<
             std::pair<idx_t, idx_t>,
-            std::shared_ptr<ISharedLabelIndex>,
+            std::shared_ptr<IndexHNSWShared>,
             LabelPairHash,
             LabelPairEqual>
             two_label_indexes;

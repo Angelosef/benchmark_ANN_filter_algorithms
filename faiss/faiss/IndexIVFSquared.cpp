@@ -48,6 +48,7 @@ void IndexIVFSquared::add_tags_c(
 
     std::vector<std::vector<idx_t>> sorted_label_ids(num_tags);
 
+#pragma omp parallel for schedule(dynamic, 1)
     for (idx_t label = 0; label < num_tags; label++) {
         size_t start = tag_offsets[label];
         size_t end = tag_offsets[label + 1];
@@ -92,29 +93,27 @@ void IndexIVFSquared::add_tags_c(
         }
     }
 
-    // 3. Build Dedicated 2-Label Pair Indexes for Large Co-occurrences
-    for (idx_t label1 = 0; label1 < num_tags; label1++) {
-        // Skip label1 if it is a small label
-        if (sorted_label_ids[label1].size() <
-            static_cast<size_t>(this->cut_off)) {
-            continue;
-        }
+    std::vector<idx_t> large_label_indices;
+    large_label_indices.reserve(num_tags);
 
-        for (idx_t label2 = label1 + 1; label2 < num_tags; label2++) {
-            // Skip label2 if it is a small label
-            if (sorted_label_ids[label2].size() <
-                static_cast<size_t>(this->cut_off)) {
-                continue;
-            }
+    for (idx_t label = 0; label < num_tags; label++) {
+        if (sorted_label_ids[label].size() >=
+            static_cast<size_t>(this->cut_off)) {
+            large_label_indices.push_back(label);
+        }
+    }
+
+    size_t num_large = large_label_indices.size();
+
+    for (size_t i = 0; i < num_large; i++) {
+        idx_t label1 = large_label_indices[i];
+
+        for (size_t j = i + 1; j < num_large; j++) {
+            idx_t label2 = large_label_indices[j];
 
             // Compute exact intersection set between label1 and label2
             std::vector<idx_t> intersection;
-            std::sort(
-                    sorted_label_ids[label1].begin(),
-                    sorted_label_ids[label1].end());
-            std::sort(
-                    sorted_label_ids[label2].begin(),
-                    sorted_label_ids[label2].end());
+
             std::set_intersection(
                     sorted_label_ids[label1].begin(),
                     sorted_label_ids[label1].end(),
@@ -129,12 +128,10 @@ void IndexIVFSquared::add_tags_c(
                         intersection.size() /
                                 static_cast<size_t>(this->cluster_size));
 
-                auto pair_idx = std::make_unique<IndexLargeLabelShared>(
-                        &this->storage, nlist, this->efConstruction, this->M);
+                auto pair_idx = std::make_unique<IndexHNSWShared>(
+                        &this->storage, this->efConstruction, this->M);
 
-                pair_idx->train_from_storage(intersection);
                 pair_idx->add(intersection);
-
                 this->two_label_indexes[{label1, label2}] = std::move(pair_idx);
             }
         }
@@ -172,7 +169,7 @@ bool IndexIVFSquared::check_membership(
 
     // Fallback: Candidate fetch and binary search
     auto cands = this->label_indexes[tag]->get_candidates(query_vec, 0);
-    std::sort(cands.begin(), cands.end());
+
     return std::binary_search(cands.begin(), cands.end(), global_id);
 }
 
@@ -347,9 +344,6 @@ void IndexIVFSquared::search_dual_tag(
         std::vector<idx_t> cands2 =
                 this->label_indexes[tag2]->get_candidates(q, n_target);
 
-        std::sort(cands1.begin(), cands1.end());
-        std::sort(cands2.begin(), cands2.end());
-
         std::set_intersection(
                 cands1.begin(),
                 cands1.end(),
@@ -384,7 +378,6 @@ void IndexIVFSquared::search(
 
 #pragma omp parallel for schedule(guided)
     for (idx_t i = 0; i < n; ++i) {
-        // std::cout << "processing query no " << i << std::endl;
         const float* q = x + i * this->d;
         float* simi = distances + i * k;
         idx_t* idxi = labels + i * k;
@@ -396,8 +389,6 @@ void IndexIVFSquared::search(
             tag1 = ivf_params->query_tags[2 * i];
             tag2 = ivf_params->query_tags[2 * i + 1];
         }
-        // std::cout << "tag1: " << tag1 << std::endl;
-        // std::cout << "tag2: " << tag2 << std::endl;
 
         // Unfiltered Search
         if (tag1 == NO_TAG && tag2 == NO_TAG) {

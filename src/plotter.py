@@ -16,7 +16,30 @@ class ANNBenchmarkPlotter:
         
         # Plotting aesthetics
         sns.set_theme(style="whitegrid")
-        self.palette = "viridis"
+        
+        # Pre-build a high-contrast qualitative color pool (26+ distinct colors)
+        self._palette_pool = (
+            sns.color_palette("tab10") + 
+            sns.color_palette("Set2") + 
+            sns.color_palette("Dark2")
+        )
+        self.color_map = {}
+
+    def _get_color_map(self, algorithms):
+        """Assigns high-contrast, distinct colors to algorithms and preserves them across plots."""
+        unique_algos = sorted(list(set(algorithms)))
+        unseen = [algo for algo in unique_algos if algo not in self.color_map]
+        
+        for algo in unseen:
+            idx = len(self.color_map)
+            if idx < len(self._palette_pool):
+                # Use distinct categorical hues from the qualitative palette pool
+                self.color_map[algo] = self._palette_pool[idx]
+            else:
+                # Dynamically sample HUSL color space for 27+ algorithms (evenly spaced hues)
+                self.color_map[algo] = sns.color_palette("husl", idx + 1)[-1]
+                
+        return {algo: self.color_map[algo] for algo in unique_algos}
 
     def _load_run_data(self, run_id):
         """Reads the individual JSON metadata for a specific run."""
@@ -31,9 +54,8 @@ class ANNBenchmarkPlotter:
         """Joins registry with JSON details into a single DataFrame."""
         registry = pd.read_csv(self.registry_path)
         
-        # Filter for the specific dataset and subset
         mask = (registry['dataset'] == dataset_name) & \
-           (registry['subset_size'] == subset_size)
+               (registry['subset_size'] == subset_size)
     
         if ds_query_param is not None:
             mask &= (registry['ds_query_param'] == ds_query_param)
@@ -44,7 +66,6 @@ class ANNBenchmarkPlotter:
         for run_id in filtered['run_id']:
             details = self._load_run_data(run_id)
             if details:
-                # Convert memory from bytes to GB for readability
                 details['memory_gb'] = details['index_memory'] / (1024**3)
                 run_details.append(details)
         
@@ -56,9 +77,8 @@ class ANNBenchmarkPlotter:
         sel_path = find_selectivity_path(dataset_name, subset_size, neighbors_retrieved, ds_query_param)
         selectivities = np.load(sel_path)
 
-        # Filter for the specific dataset and subset
         mask = (registry['dataset'] == dataset_name) & \
-           (registry['subset_size'] == subset_size)
+               (registry['subset_size'] == subset_size)
     
         if ds_query_param is not None:
             mask &= (registry['ds_query_param'] == ds_query_param)
@@ -71,10 +91,8 @@ class ANNBenchmarkPlotter:
         selectivities = selectivities / details['base_count']
         sel_bucket_points = np.geomspace(np.min(selectivities), np.max(selectivities), 5)
         
-        
         run_details = []
         for run_id in filtered['run_id']:
-            
             for i in range(len(sel_bucket_points)-1):
                 min_sel = sel_bucket_points[i]
                 max_sel = sel_bucket_points[i+1]
@@ -134,10 +152,8 @@ class ANNBenchmarkPlotter:
         df = df.sort_values(by=['index_name', 'total_query_time'])
     
         pareto_frames = []
-        
         for algo in df['index_name'].unique():
             algo_data = df[df['index_name'] == algo]
-            
             max_recall_so_far = -1.0
             frontier_indices = []
             
@@ -149,14 +165,16 @@ class ANNBenchmarkPlotter:
             pareto_frames.append(algo_data.loc[frontier_indices])
 
         frontier_df = pd.concat(pareto_frames)
+        colors = self._get_color_map(frontier_df['index_name'])
 
         sns.lineplot(
             data=frontier_df, 
             x='avg_recall', 
             y='total_query_time', 
             hue='index_name', 
+            palette=colors,
             marker='o',
-            sort=True # Ensure points are connected in order of x-axis
+            sort=True
         )
         
         plt.yscale('log')
@@ -171,19 +189,13 @@ class ANNBenchmarkPlotter:
     
     def plot_recall_vs_latency(self, df, dataset_name, subset_size, ds_query_param, min_sel=0.0, max_sel=1.0):
         """Recall vs latency Pareto frontier with percentile crosses."""
-
         plt.figure(figsize=(10, 6))
 
-        # ------------------------------------------------------------------
-        # Build Pareto frontier for each algorithm
-        # ------------------------------------------------------------------
         df = df.sort_values(by=["index_name", "p50_latency"])
 
         pareto_frames = []
-
         for algo in df["index_name"].unique():
             algo_data = df[df["index_name"] == algo]
-
             max_recall_so_far = -1.0
             frontier_indices = []
 
@@ -195,39 +207,25 @@ class ANNBenchmarkPlotter:
             pareto_frames.append(algo_data.loc[frontier_indices])
 
         frontier_df = pd.concat(pareto_frames)
+        colors = self._get_color_map(frontier_df["index_name"])
 
-        # ------------------------------------------------------------------
-        # Plot median curve
-        # ------------------------------------------------------------------
         ax = sns.lineplot(
             data=frontier_df,
             x="avg_recall",
             y="p50_latency",
             hue="index_name",
+            palette=colors,
             marker="o",
             sort=True,
         )
 
-        # Get colors assigned by seaborn
-        lines = ax.get_lines()
-        algo_names = frontier_df["index_name"].unique()
-
-        color_map = {
-            algo: line.get_color()
-            for algo, line in zip(algo_names, lines[: len(algo_names)])
-        }
-
-        # ------------------------------------------------------------------
-        # Draw percentile crosses
-        # ------------------------------------------------------------------
+        # Draw percentile crosses using direct lookup from self.color_map
         for _, row in frontier_df.iterrows():
-
-            color = color_map[row["index_name"]]
+            color = colors[row["index_name"]]
 
             x = row["avg_recall"]
             y = row["p50_latency"]
 
-            # ----- inner cross (25-75 percentile) -----
             plt.hlines(
                 y=y,
                 xmin=x - row["std_recall"],
@@ -260,7 +258,6 @@ class ANNBenchmarkPlotter:
 
         plt.xlabel("Recall")
         plt.ylabel("Latency Per Query (s)")
-
         plt.grid(True, which="both", alpha=0.4)
 
         fname = (
@@ -280,10 +277,8 @@ class ANNBenchmarkPlotter:
         df = df.sort_values(by=['index_name', 'qps'], ascending=False)
 
         pareto_frames = []
-        
         for algo in df['index_name'].unique():
             algo_data = df[df['index_name'] == algo]
-            
             max_avg_recall_so_far = -1.0
             frontier_indices = []
             
@@ -295,12 +290,14 @@ class ANNBenchmarkPlotter:
             pareto_frames.append(algo_data.loc[frontier_indices])
 
         frontier_df = pd.concat(pareto_frames)
+        colors = self._get_color_map(frontier_df['index_name'])
 
         ax = sns.lineplot(
             data=frontier_df, 
-            x='avg_recall', # Changed from 'recall' to match your column logic
+            x='avg_recall',
             y='qps', 
             hue='index_name', 
+            palette=colors,
             marker='o',
             sort=True
         )
@@ -310,7 +307,6 @@ class ANNBenchmarkPlotter:
         plt.xlabel("Recall", fontsize=12)
         plt.ylabel("Queries per Second", fontsize=12)
         plt.grid(True, which="both", ls="-", alpha=0.3)
-        
         plt.xlim(-0.02, 1.02)
         
         os.makedirs(self.output_dir, exist_ok=True)
@@ -322,6 +318,8 @@ class ANNBenchmarkPlotter:
         """Creates bar charts for Build Time and Memory usage."""
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 
+        colors = self._get_color_map(df['index_name'])
+
         # Build Time Bar Chart
         sns.barplot(
             data=df, 
@@ -331,7 +329,7 @@ class ANNBenchmarkPlotter:
             errorbar='sd',
             legend=False,
             ax=ax1, 
-            palette=self.palette
+            palette=colors
         )
         ax1.set_title("Average Build Time")
         ax1.set_ylabel("Seconds")
@@ -346,7 +344,7 @@ class ANNBenchmarkPlotter:
             errorbar='sd',
             legend=False,
             ax=ax2, 
-            palette=self.palette
+            palette=colors
         )
         ax2.set_title("Average Index Memory")
         ax2.set_ylabel("GB")
