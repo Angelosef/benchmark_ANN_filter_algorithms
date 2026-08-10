@@ -118,7 +118,7 @@ The plots will show the following metrics (this is a sample from the plots that 
 
 The recall vs latency plots:
 
-![Alt Text](sampled_plots/GIST_1.0__0.0023_0.0342_recall_latency.png)
+![Alt Text](sampled_plots/GIST_1.0__0.0000_1.0000_recall_latency.png)
 
 
 The build time + index memory plots
