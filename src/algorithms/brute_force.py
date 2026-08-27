@@ -15,24 +15,22 @@ class BruteForceIdFilter(BaseANNIndex):
 
 @BruteForceIdFilter.register_build("structured")
 def build_structured(self, vectors, attributes, parameters):
-    self.base_vectors = vectors
     self.attribute_index = AttributeIndex(attributes)
     sub_index = faiss.IndexFlatL2(self.dim)
     self.index = faiss.IndexIDMap(sub_index)
     
     ids = np.arange(len(vectors)).astype('int64')
-    self.index.add_with_ids(self.base_vectors, ids)
+    self.index.add_with_ids(vectors, ids)
 
 @BruteForceIdFilter.register_build("sparse")
 def build_sparse(self, vectors, attributes, parameters):
-    self.base_vectors = vectors
     self.base_attributes_csc = attributes.tocsc()
     
     sub_index = faiss.IndexFlatL2(self.dim)
     self.index = faiss.IndexIDMap(sub_index)
     
     ids = np.arange(len(vectors)).astype('int64')
-    self.index.add_with_ids(self.base_vectors, ids)
+    self.index.add_with_ids(vectors, ids)
 
 # --- QUERY STRATEGIES ---
 @BruteForceIdFilter.register_init_query("structured", "conjunction")

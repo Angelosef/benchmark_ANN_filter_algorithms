@@ -23,13 +23,12 @@ class HNSWPostfilter(BaseANNIndex):
 
 @HNSWPostfilter.register_build("structured")
 def build_structured(self, vectors, attributes, parameters):
-    self.base_vectors = vectors
     self.base_attributes = attributes
     self.build_parameters = parameters
 
     self.index = faiss.IndexHNSWFlat(self.dim, self.build_parameters.graph_degree, faiss.METRIC_L2)
     self.index.hnsw.efConstruction = self.build_parameters.efConstruction
-    self.index.add(self.base_vectors)
+    self.index.add(vectors)
     return
 
 @HNSWPostfilter.register_init_query("structured", "conjunction")
@@ -97,14 +96,13 @@ def query_structured_CNF(self, vector, filter, k):
 
 @HNSWPostfilter.register_build("sparse")
 def build_sparse(self, vectors, attributes, parameters):
-    self.base_vectors = vectors
     self.base_attributes = attributes
     self.base_attributes.sort_indices()
     self.build_parameters = parameters
 
     self.index = faiss.IndexHNSWFlat(self.dim, self.build_parameters.graph_degree, faiss.METRIC_L2)
     self.index.hnsw.efConstruction = self.build_parameters.efConstruction
-    self.index.add(self.base_vectors)
+    self.index.add(vectors)
     return
 
 @HNSWPostfilter.register_init_query("sparse", "conjunction")

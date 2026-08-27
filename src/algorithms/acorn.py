@@ -26,7 +26,6 @@ class Acorn(BaseANNIndex):
 
 @Acorn.register_build("structured")
 def build_structured(self, vectors, attributes, parameters):
-    self.base_vectors = vectors
     self.attribute_index = AttributeIndex(attributes)
     self.build_params = parameters
     self.index = faiss.IndexAcorn(
