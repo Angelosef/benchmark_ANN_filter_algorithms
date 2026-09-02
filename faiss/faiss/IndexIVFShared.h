@@ -8,6 +8,8 @@
 #include <faiss/Index.h>
 #include <faiss/invlists/InvertedLists.h>
 
+#include <faiss/impl/io.h>
+
 namespace faiss {
 
 struct IndexIVFShared {
@@ -26,6 +28,8 @@ struct IndexIVFShared {
             const Index* storage,
             size_t nlist,
             MetricType metric = METRIC_L2);
+
+    IndexIVFShared() = default;
 
     // Constructor with custom quantizer
     IndexIVFShared(
@@ -59,6 +63,12 @@ struct IndexIVFShared {
 
     void reset();
 };
+
+void write_ivf_shared(const IndexIVFShared& ivf_idx, IOWriter* f);
+void read_ivf_shared(
+        IndexIVFShared& ivf_idx,
+        IOReader* f,
+        const Index* storage);
 
 } // namespace faiss
 

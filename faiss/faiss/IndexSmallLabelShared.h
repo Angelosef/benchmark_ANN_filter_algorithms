@@ -7,16 +7,19 @@
 
 #include <faiss/ISharedLabelIndex.h>
 #include <faiss/Index.h>
+#include <faiss/impl/io.h>
 
 namespace faiss {
 
 class IndexSmallLabelShared : public ISharedLabelIndex {
-   private:
+   public:
     const Index* storage;
     std::vector<idx_t> ids; // Guaranteed to be kept sorted
 
    public:
     explicit IndexSmallLabelShared(const Index* storage) : storage(storage) {}
+
+    IndexSmallLabelShared() = default;
 
     void add(const std::vector<idx_t>& new_ids) override;
 
@@ -43,6 +46,13 @@ class IndexSmallLabelShared : public ISharedLabelIndex {
         return ids;
     }
 };
+
+void write_small_label_shared(const IndexSmallLabelShared& idx, IOWriter* f);
+
+void read_small_label_shared(
+        IndexSmallLabelShared& idx,
+        IOReader* f,
+        const Index* storage);
 
 } // namespace faiss
 

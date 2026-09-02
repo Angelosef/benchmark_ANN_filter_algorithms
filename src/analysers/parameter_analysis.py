@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-from src.analysis.utils import load_run_data
+from src.analysers.utils import load_run_data
 from matplotlib.lines import Line2D
 
 def clean_param_name(p):

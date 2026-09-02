@@ -362,7 +362,7 @@ void write_ProductQuantizer(const ProductQuantizer* pq, const char* fname) {
     write_ProductQuantizer(pq, &writer);
 }
 
-static void write_HNSW(const HNSW* hnsw, IOWriter* f) {
+void write_HNSW(const HNSW* hnsw, IOWriter* f) {
     WRITEVECTOR(hnsw->assign_probas);
     WRITEVECTOR(hnsw->cum_nneighbor_per_level);
     WRITEVECTOR(hnsw->levels);

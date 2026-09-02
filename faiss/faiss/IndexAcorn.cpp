@@ -13,6 +13,19 @@
 
 #include <omp.h>
 
+#include <faiss/impl/FaissAssert.h>
+#include <faiss/impl/io.h>
+#include <faiss/impl/io_macros.h>
+#include <faiss/index_io.h>
+#include <faiss/impl/HierarchicalGraph.cpp>
+
+bool sample_bernoulli(std::mt19937& rng, int N) {
+    // std::bernoulli_distribution takes the probability 'p' of returning true
+    std::bernoulli_distribution dist(1.0 / N);
+
+    return dist(rng); // Returns true with probability 1/N, false with (1 - 1/N)
+}
+
 namespace faiss {
 
 IndexAcorn::IndexAcorn(
@@ -28,48 +41,113 @@ IndexAcorn::IndexAcorn(
           gamma(gamma),
           M(M),
           Mbeta(Mbeta) {
+    this->graph = std::make_unique<HierarchicalGraph>(
+            &(this->storage), M, Mbeta, gamma);
     this->rng.seed(42);
     this->ml = 1 / std::log(this->M);
+}
+
+IndexAcorn::IndexAcorn(
+        const std::string& index_file,
+        const std::string& dataset_file) {
+    // ---------------------------------------------------------------------
+    // Step 1: Read Graph topology & Hyperparameters from index_file
+    // ---------------------------------------------------------------------
+    {
+        faiss::FileIOReader reader(index_file.c_str());
+        faiss::IOReader* f = &reader;
+
+        READ1(this->d);
+        READ1(this->ntotal);
+        READ1(this->verbose);
+        READ1(this->is_trained);
+        READ1(this->metric_type);
+
+        READ1(this->efConstruction);
+        READ1(this->gamma);
+        READ1(this->M);
+        READ1(this->Mbeta);
+        READ1(this->ml);
+
+        this->graph = std::make_unique<HierarchicalGraph>(
+                &this->storage, this->M, this->Mbeta, this->gamma);
+        read_hierarchical_graph(*this->graph, f);
+    }
+
+    // ---------------------------------------------------------------------
+    // Step 2: Load storage dataset from dataset_file safely
+    // ---------------------------------------------------------------------
+    if (!dataset_file.empty()) {
+        faiss::FileIOReader dataset_reader(dataset_file.c_str());
+
+        std::unique_ptr<faiss::Index> loaded_storage(
+                faiss::read_index(&dataset_reader));
+
+        auto* loaded_flat =
+                dynamic_cast<faiss::IndexFlat*>(loaded_storage.get());
+        FAISS_THROW_IF_NOT_MSG(
+                loaded_flat,
+                "Dataset file does not contain a valid IndexFlat.");
+
+        // Copy underlying attributes safely without object slicing
+        this->storage.d = loaded_flat->d;
+        this->storage.ntotal = loaded_flat->ntotal;
+        this->storage.verbose = loaded_flat->verbose;
+        this->storage.is_trained = loaded_flat->is_trained;
+        this->storage.metric_type = loaded_flat->metric_type;
+        this->storage.code_size = loaded_flat->code_size;
+
+        // Swap vector payload buffer directly
+        this->storage.codes = std::move(loaded_flat->codes);
+
+        // Keep root index properties aligned with loaded storage
+        this->ntotal = loaded_flat->ntotal;
+    }
+}
+
+void IndexAcorn::writeToFile(
+        const std::string& index_file,
+        const std::string& dataset_file) const {
+    // ---------------------------------------------------------------------
+    // Step 1: Write Graph topology & Hyperparameters to index_file
+    // ---------------------------------------------------------------------
+    {
+        faiss::FileIOWriter writer(index_file.c_str());
+        faiss::IOWriter* f = &writer;
+
+        WRITE1(this->d);
+        WRITE1(this->ntotal);
+        WRITE1(this->verbose);
+        WRITE1(this->is_trained);
+        WRITE1(this->metric_type);
+
+        WRITE1(this->efConstruction);
+        WRITE1(this->gamma);
+        WRITE1(this->M);
+        WRITE1(this->Mbeta);
+        WRITE1(this->ml);
+
+        FAISS_THROW_IF_NOT_MSG(this->graph, "Cannot save uninitialized graph.");
+        write_hierarchical_graph(*this->graph, f);
+    }
+
+    // ---------------------------------------------------------------------
+    // Step 2: Write vector payload (IndexFlat) to dataset_file
+    // ---------------------------------------------------------------------
+    if (!dataset_file.empty()) {
+        faiss::FileIOWriter dataset_writer(dataset_file.c_str());
+        faiss::write_index(&this->storage, &dataset_writer);
+    }
 }
 
 void IndexAcorn::reset() {
     this->storage.reset();
     this->ntotal = 0;
-    this->graph.clear();
+    this->graph->clear();
 }
 
 void IndexAcorn::reconstruct(idx_t key, float* recons) const {
     this->storage.reconstruct(key, recons);
-}
-
-idx_t IndexAcorn::getFurthest(
-        int layer,
-        const std::vector<idx_t> candidates,
-        idx_t target) {
-    if (candidates.empty()) {
-        return -1; // Guard against empty candidate lists
-    }
-    idx_t target_index = this->graph.getIndexSafe(layer, target);
-    const float* target_vec = this->storage.get_xb() + target_index * this->d;
-
-    // Get distance computer from storage
-    std::unique_ptr<faiss::DistanceComputer> dis(
-            this->storage.get_distance_computer());
-
-    dis->set_query(target_vec);
-
-    idx_t furthest_node = candidates[0];
-    float max_dist = (*dis)(this->graph.getIndexSafe(layer, candidates[0]));
-
-    for (size_t i = 1; i < candidates.size(); ++i) {
-        float dist = (*dis)(this->graph.getIndexSafe(layer, candidates[i]));
-        if (dist > max_dist) {
-            max_dist = dist;
-            furthest_node = candidates[i];
-        }
-    }
-
-    return furthest_node;
 }
 
 void IndexAcorn::add(idx_t n, const float* x) {
@@ -78,16 +156,12 @@ void IndexAcorn::add(idx_t n, const float* x) {
 
 #pragma omp parallel
     {
-        // Thread-local RNG to avoid contention/data races on this->rng
+        //  Thread-local RNG to avoid contention/data races on this->rng
         std::mt19937 local_rng(42 + omp_get_thread_num());
 
 #pragma omp for schedule(dynamic, 100)
         for (idx_t i = 0; i < n; i++) {
-            /*
-            if (i % 100 == 0) {
-                std::cout << "adding node of index " << i << std::endl;
-            }
-            */
+            //    std::cout << "adding node of index " << i << std::endl;
 
             idx_t index = offset + i;
             const float* vec = x + i * this->d;
@@ -95,116 +169,52 @@ void IndexAcorn::add(idx_t n, const float* x) {
             this->addSingle(index, vec, local_rng);
         }
     }
+    // this->graph->print();
 
     this->ntotal = this->storage.ntotal;
 }
 
-bool IndexAcorn::addEdgeConditionally(
-        int layer,
-        idx_t new_node,
-        idx_t candidate_node) {
-    if (new_node == candidate_node) {
-        return false;
-    }
-
-    // 1. Snapshot neighbors for distance checking
-    const std::vector<idx_t> current_neighbours =
-            this->graph.getNeighborsSafe(layer, candidate_node);
-
-    size_t max_allowed = static_cast<size_t>(this->M * this->gamma);
-
-    // If candidate has space, try adding directly
-    if (current_neighbours.size() < max_allowed) {
-        return this->graph.tryReplaceEdge(
-                layer, candidate_node, -1, new_node, max_allowed);
-    }
-
-    // 2. Find furthest node on snapshot
-    std::vector<idx_t> candidates = current_neighbours;
-    candidates.push_back(new_node);
-
-    idx_t furthest_node = this->getFurthest(layer, candidates, candidate_node);
-
-    // If new_node is the furthest, we don't add it
-    if (furthest_node == new_node) {
-        return false;
-    }
-
-    // 3. Atomically attempt replacement with validation inside the lock
-    return this->graph.tryReplaceEdge(
-            layer, candidate_node, furthest_node, new_node, max_allowed);
-}
-
 void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
     bool build_phase = true;
-    int max_layer = this->graph.getMaxLayerSafe();
+    int max_layer = this->graph->getMaxLayerSafe();
 
     int assigned_layer = this->assignLayer(rng);
-    idx_t new_node = this->graph.addNode(assigned_layer, index);
+    idx_t new_node = this->graph->addNode(assigned_layer, index);
 
-    idx_t entry_node = this->graph.getEntryPoint();
+    idx_t entry_node = this->graph->getEntryPoint();
 
     for (int layer = max_layer; layer > assigned_layer; layer -= 1) {
         std::vector<idx_t> results =
                 this->searchLayerSafe(layer, entry_node, vec, 1);
-        entry_node = this->graph.getDownwardsNodeSafe(layer, results[0]);
+        entry_node = this->graph->getDownwardsNodeSafe(layer, results[0]);
     }
-    for (int layer = this->graph.getMaxLayerSafe(); layer > max_layer;
+    for (int layer = this->graph->getMaxLayerSafe(); layer > max_layer;
          layer -= 1) {
-        new_node = this->graph.getDownwardsNodeSafe(layer, new_node);
+        new_node = this->graph->getDownwardsNodeSafe(layer, new_node);
     }
 
     for (int layer = std::min(max_layer, assigned_layer); layer > -1;
          layer -= 1) {
         int active_ef = this->efConstruction;
-        if (layer == 0)
-            active_ef = active_ef / 2;
+
         std::vector<idx_t> results =
                 this->searchLayerSafe(layer, entry_node, vec, active_ef);
-        entry_node = this->graph.getDownwardsNodeSafe(layer, results[0]);
+        entry_node = this->graph->getDownwardsNodeSafe(layer, results[0]);
 
         // add edges
         if (layer > 0) {
-            for (int i = 0; i < this->M * this->gamma && i < results.size();
-                 i++) {
-                idx_t candidate_node = results[i];
-                this->addEdgeConditionally(layer, new_node, candidate_node);
-            }
+            this->graph->addInitialEdges(layer, new_node, results);
 
-            new_node = this->graph.getDownwardsNodeSafe(layer, new_node);
+            new_node = this->graph->getDownwardsNodeSafe(layer, new_node);
         } else if (layer == 0) {
-            int added_count = 0;
-            for (int i = 0; i < this->Mbeta && i < results.size(); i++) {
-                idx_t candidate_node = results[i];
-                bool added = this->addEdgeConditionally(
-                        layer, new_node, candidate_node);
-                if (added) {
-                    added_count++;
+            this->graph->addInitialBottomEdges(new_node, results);
+            std::vector<idx_t> new_neighbors =
+                    this->graph->getNeighborsSafe(layer, new_node);
+            for (int i = 0; i < new_neighbors.size(); i++) {
+                bool prune_node = sample_bernoulli(rng, this->M);
+                if (prune_node) {
+                    this->graph->twoHopPruning(layer, new_neighbors[i]);
                 }
-            }
-            std::unordered_set<idx_t> dynamic_neighbours;
-
-            int i = this->Mbeta;
-            while (dynamic_neighbours.size() <
-                           (this->M * this->gamma - added_count) &&
-                   i < results.size()) {
-                idx_t candidate_node = results[i];
-                if (dynamic_neighbours.count(candidate_node) > 0) {
-                    i++;
-                    continue;
-                }
-
-                bool added = this->addEdgeConditionally(
-                        layer, new_node, candidate_node);
-                if (added) {
-                    const std::vector<idx_t> two_hop_neighbours =
-                            this->graph.getNeighborsSafe(0, candidate_node);
-                    dynamic_neighbours.insert(candidate_node);
-                    for (idx_t node : two_hop_neighbours) {
-                        dynamic_neighbours.insert(node);
-                    }
-                }
-                i++;
             }
         }
     }
@@ -221,6 +231,105 @@ int IndexAcorn::assignLayer(std::mt19937& rng) const {
     double exp_variable = -this->ml * std::log(uniform_variable);
 
     return static_cast<int>(exp_variable);
+}
+
+std::vector<idx_t> IndexAcorn::searchLayerSafe(
+        int layer,
+        idx_t entry_node,
+        const float* vec,
+        int results_size) const {
+    std::unique_ptr<faiss::DistanceComputer> dis(
+            this->storage.get_distance_computer());
+
+    dis->set_query(vec);
+
+    MinimaxHeapT results(results_size);
+
+    // Min-Heap for greedy search (closest candidates popped first)
+    using DistNode = std::pair<float, idx_t>;
+    std::priority_queue<DistNode, std::vector<DistNode>, std::greater<DistNode>>
+            frontier;
+
+    std::unordered_set<idx_t> visited;
+
+    float entry_dist = (*dis)(this->graph->getIndexSafe(layer, entry_node));
+
+    results.push(entry_node, entry_dist);
+    visited.insert(entry_node);
+    frontier.push({entry_dist, entry_node});
+
+    while (!frontier.empty()) {
+        DistNode frontier_best = frontier.top();
+        frontier.pop();
+
+        float frontier_dist = frontier_best.first;
+        idx_t frontier_node = frontier_best.second;
+
+        if (results.size() == results_size && frontier_dist > results.max()) {
+            break;
+        }
+
+        const std::vector<idx_t> neighbours =
+                this->graph->getNeighborsSafe(layer, frontier_node);
+
+        // Process 1-hop neighbors
+        int neighbour_count = 0;
+        for (idx_t node : neighbours) {
+            if (neighbour_count >= this->M) {
+                break;
+            }
+            if (visited.count(node) == 0) {
+                visited.insert(node);
+                float dist = (*dis)(this->graph->getIndexSafe(layer, node));
+                if (dist < results.max() || results.size() < results_size) {
+                    results.push(node, dist);
+                    frontier.push({dist, node});
+                }
+            }
+            neighbour_count++;
+        }
+
+        // Process 2-hop neighbors for ACORN layer 0
+        if (layer == 0) {
+            for (size_t i = this->Mbeta; i < neighbours.size(); ++i) {
+                if (neighbour_count >= this->M) {
+                    break;
+                }
+                idx_t one_hop_node = neighbours[i];
+
+                // Zero-copy reference to 2-hop neighbors
+                const std::vector<idx_t> two_hop_neighbours =
+                        this->graph->getNeighborsSafe(layer, one_hop_node);
+
+                for (idx_t node : two_hop_neighbours) {
+                    if (neighbour_count >= this->M) {
+                        break;
+                    }
+                    if (visited.count(node) == 0) {
+                        visited.insert(node);
+                        float dist = (*dis)(this->graph->getIndex(layer, node));
+                        if (dist < results.max() ||
+                            results.size() < results_size) {
+                            results.push(node, dist);
+                            frontier.push({dist, node});
+                        }
+                    }
+                    neighbour_count++;
+                }
+            }
+        }
+    }
+
+    std::vector<idx_t> result_nodes;
+    result_nodes.reserve(results.size());
+
+    // Dummy buffer for pop_min
+    float dummy_dist = 0.0f;
+    while (results.size() > 0) {
+        result_nodes.push_back(results.pop_min(&dummy_dist));
+    }
+
+    return result_nodes;
 }
 
 void IndexAcorn::search(
@@ -252,6 +361,8 @@ void IndexAcorn::search(
             return;
         }
     }
+
+#pragma omp for schedule(dynamic, 100)
     for (idx_t i = 0; i < n; i++) {
         this->searchSingle(
                 x + i * this->d,
@@ -282,7 +393,7 @@ std::vector<idx_t> IndexAcorn::searchLayer(
 
     std::unordered_set<idx_t> visited;
 
-    float entry_dist = (*dis)(this->graph.getIndex(layer, entry_node));
+    float entry_dist = (*dis)(this->graph->getIndex(layer, entry_node));
 
     results.push(entry_node, entry_dist);
     visited.insert(entry_node);
@@ -300,138 +411,54 @@ std::vector<idx_t> IndexAcorn::searchLayer(
         }
 
         const std::vector<idx_t>& neighbours =
-                this->graph.getNeighbors(layer, frontier_node);
+                this->graph->getNeighbors(layer, frontier_node);
 
         // Process 1-hop neighbors
         int neighbour_count = 0;
         for (idx_t node : neighbours) {
-            if ((!sel || sel->is_member(this->graph.getIndex(layer, node))) &&
+            if (neighbour_count >= this->M) {
+                break;
+            }
+            if ((!sel || sel->is_member(this->graph->getIndex(layer, node))) &&
                 visited.count(node) == 0) {
                 visited.insert(node);
-                float dist = (*dis)(this->graph.getIndex(layer, node));
+                neighbour_count++;
+                float dist = (*dis)(this->graph->getIndex(layer, node));
                 if (dist < results.max() || results.size() < results_size) {
                     results.push(node, dist);
                     frontier.push({dist, node});
                 }
             }
-            neighbour_count++;
         }
 
         // Process 2-hop neighbors for ACORN layer 0
         if (layer == 0) {
             for (size_t i = this->Mbeta; i < neighbours.size(); ++i) {
+                if (neighbour_count >= this->M) {
+                    break;
+                }
                 idx_t one_hop_node = neighbours[i];
 
                 // Zero-copy reference to 2-hop neighbors
                 const std::vector<idx_t>& two_hop_neighbours =
-                        this->graph.getNeighbors(layer, one_hop_node);
-
-                for (idx_t node : two_hop_neighbours) {
-                    if ((!sel ||
-                         sel->is_member(this->graph.getIndex(layer, node))) &&
-                        visited.count(node) == 0) {
-                        visited.insert(node);
-                        float dist = (*dis)(this->graph.getIndex(layer, node));
-                        if (dist < results.max() ||
-                            results.size() < results_size) {
-                            results.push(node, dist);
-                            frontier.push({dist, node});
-                        }
-                    }
-                    neighbour_count++;
-                }
-            }
-        }
-    }
-
-    std::vector<idx_t> result_nodes;
-    result_nodes.reserve(results.size());
-
-    // Dummy buffer for pop_min
-    float dummy_dist = 0.0f;
-    while (results.size() > 0) {
-        result_nodes.push_back(results.pop_min(&dummy_dist));
-    }
-
-    return result_nodes;
-}
-
-std::vector<idx_t> IndexAcorn::searchLayerSafe(
-        int layer,
-        idx_t entry_node,
-        const float* vec,
-        int results_size) const {
-    std::unique_ptr<faiss::DistanceComputer> dis(
-            this->storage.get_distance_computer());
-
-    dis->set_query(vec);
-
-    MinimaxHeapT results(results_size);
-
-    // Min-Heap for greedy search (closest candidates popped first)
-    using DistNode = std::pair<float, idx_t>;
-    std::priority_queue<DistNode, std::vector<DistNode>, std::greater<DistNode>>
-            frontier;
-
-    std::unordered_set<idx_t> visited;
-
-    float entry_dist = (*dis)(this->graph.getIndexSafe(layer, entry_node));
-
-    results.push(entry_node, entry_dist);
-    visited.insert(entry_node);
-    frontier.push({entry_dist, entry_node});
-
-    while (!frontier.empty()) {
-        DistNode frontier_best = frontier.top();
-        frontier.pop();
-
-        float frontier_dist = frontier_best.first;
-        idx_t frontier_node = frontier_best.second;
-
-        if (results.size() == results_size && frontier_dist > results.max()) {
-            break;
-        }
-
-        const std::vector<idx_t> neighbours =
-                this->graph.getNeighborsSafe(layer, frontier_node);
-
-        // Process 1-hop neighbors
-        int neighbour_count = 0;
-        for (idx_t node : neighbours) {
-            if (visited.count(node) == 0) {
-                visited.insert(node);
-                float dist = (*dis)(this->graph.getIndexSafe(layer, node));
-                if (dist < results.max() || results.size() < results_size) {
-                    results.push(node, dist);
-                    frontier.push({dist, node});
-                }
-            }
-            neighbour_count++;
-        }
-
-        // Process 2-hop neighbors for ACORN layer 0
-        if (layer == 0) {
-            for (size_t i = this->Mbeta; i < neighbours.size(); ++i) {
-                idx_t one_hop_node = neighbours[i];
-
-                // Zero-copy reference to 2-hop neighbors
-                const std::vector<idx_t> two_hop_neighbours =
-                        this->graph.getNeighborsSafe(layer, one_hop_node);
+                        this->graph->getNeighbors(layer, one_hop_node);
 
                 for (idx_t node : two_hop_neighbours) {
                     if (neighbour_count >= this->M) {
                         break;
                     }
-                    if (visited.count(node) == 0) {
+                    if ((!sel ||
+                         sel->is_member(this->graph->getIndex(layer, node))) &&
+                        visited.count(node) == 0) {
                         visited.insert(node);
-                        float dist = (*dis)(this->graph.getIndex(layer, node));
+                        neighbour_count++;
+                        float dist = (*dis)(this->graph->getIndex(layer, node));
                         if (dist < results.max() ||
                             results.size() < results_size) {
                             results.push(node, dist);
                             frontier.push({dist, node});
                         }
                     }
-                    neighbour_count++;
                 }
             }
         }
@@ -456,8 +483,8 @@ void IndexAcorn::searchSingle(
         idx_t* labels,
         const SearchParameters* params) const {
     bool build_phase = false;
-    int max_layer = this->graph.getMaxLayer();
-    idx_t entry_node = this->graph.getEntryPoint();
+    int max_layer = this->graph->getMaxLayer();
+    idx_t entry_node = this->graph->getEntryPoint();
 
     int efSearch = 16;
     if (params) {
@@ -475,7 +502,7 @@ void IndexAcorn::searchSingle(
     for (int layer = max_layer; layer > 0; layer -= 1) {
         std::vector<idx_t> results =
                 this->searchLayer(layer, entry_node, q_vec, 1, selector);
-        entry_node = this->graph.getDownwardsNode(layer, results[0]);
+        entry_node = this->graph->getDownwardsNode(layer, results[0]);
     }
 
     std::vector<idx_t> final_candidates =
@@ -489,7 +516,7 @@ void IndexAcorn::searchSingle(
                   static_cast<int>(final_candidates.size()));
          i++) {
         idx_t candidate = final_candidates[i];
-        idx_t candidate_index = this->graph.getIndex(0, candidate);
+        idx_t candidate_index = this->graph->getIndex(0, candidate);
         float dist = (*dis)(candidate_index);
         labels[i] = candidate_index;
         distances[i] = dist;

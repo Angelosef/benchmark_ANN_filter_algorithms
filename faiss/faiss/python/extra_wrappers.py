@@ -813,9 +813,30 @@ SearchParametersIVFSquared.set_query_tags = _SearchParametersIVFSquared_set_quer
 
 _orig_IndexIVFSquared_init = faiss.IndexIVFSquared.__init__
 
-def _IndexIVFSquared_init(self, d, cut_off=100, cluster_size=32, cut_off_tiny=20, cut_off_bitvector=1000, efConstruction=128, M=16):
+def _IndexIVFSquared_init(self, *args, **kwargs):
+    # Case 1: Called with file paths (e.g., IndexIVFSquared("file1", "file2"))
+    if len(args) > 0 and isinstance(args[0], str):
+        _orig_IndexIVFSquared_init(self, *args, **kwargs)
+        return
+
+    # Case 2: Standard parameter initialization with default values
+    def_d = args[0] if len(args) > 0 else kwargs.get('d')
+    def_cut_off = args[1] if len(args) > 1 else kwargs.get('cut_off', 100)
+    def_cluster_size = args[2] if len(args) > 2 else kwargs.get('cluster_size', 32)
+    def_cut_off_tiny = args[3] if len(args) > 3 else kwargs.get('cut_off_tiny', 20)
+    def_cut_off_bitvector = args[4] if len(args) > 4 else kwargs.get('cut_off_bitvector', 1000)
+    def_efConstruction = args[5] if len(args) > 5 else kwargs.get('efConstruction', 128)
+    def_M = args[6] if len(args) > 6 else kwargs.get('M', 16)
+
     _orig_IndexIVFSquared_init(
-        self, d, cut_off, cluster_size, cut_off_tiny, cut_off_bitvector, efConstruction, M
+        self,
+        def_d,
+        def_cut_off,
+        def_cluster_size,
+        def_cut_off_tiny,
+        def_cut_off_bitvector,
+        def_efConstruction,
+        def_M,
     )
 
 faiss.IndexIVFSquared.__init__ = _IndexIVFSquared_init

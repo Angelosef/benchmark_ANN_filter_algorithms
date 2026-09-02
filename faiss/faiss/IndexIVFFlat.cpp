@@ -30,6 +30,13 @@
 
 #include <faiss/utils/utils.h>
 
+#include <faiss/impl/FaissAssert.h>
+#include <faiss/impl/io.h>
+#include <faiss/index_io.h>
+#include <iostream>
+#include <memory>
+#include <string>
+
 namespace faiss {
 
 /*****************************************
@@ -55,6 +62,88 @@ IndexIVFFlat::IndexIVFFlat(
 
 IndexIVFFlat::IndexIVFFlat() {
     by_residual = false;
+}
+
+IndexIVFFlat::IndexIVFFlat(
+        const std::string& index_file,
+        const std::string& dataset_file) {
+    // ---------------------------------------------------------------------
+    // Step A: Read coarse quantizer index and topology from index_file
+    // ---------------------------------------------------------------------
+    {
+        FileIOReader reader(index_file.c_str());
+        // Load the coarse quantizer directly
+        std::unique_ptr<Index> loaded_quantizer(read_index(&reader));
+
+        FAISS_THROW_IF_NOT_MSG(
+                loaded_quantizer,
+                "Failed to load coarse quantizer from index_file.");
+
+        this->d = loaded_quantizer->d;
+        this->metric_type = loaded_quantizer->metric_type;
+        this->nlist = loaded_quantizer->ntotal; // Quantizer ntotal = nlist
+
+        // Transfer ownership of quantizer
+        this->quantizer = loaded_quantizer.release();
+        this->own_fields = true;
+        this->code_size = this->d * sizeof(float);
+    }
+
+    // ---------------------------------------------------------------------
+    // Step B: Load inverted lists payload from dataset_file
+    // ---------------------------------------------------------------------
+    if (!dataset_file.empty()) {
+        FileIOReader dataset_reader(dataset_file.c_str());
+
+        // Use Faiss's direct InvertedLists reader hook
+        InvertedLists* loaded_invlists = read_InvertedLists(&dataset_reader);
+
+        FAISS_THROW_IF_NOT_MSG(
+                loaded_invlists,
+                "Failed to load inverted lists from dataset_file.");
+
+        // Clear default empty inverted lists if initialized by base constructor
+        if (this->invlists && this->own_invlists) {
+            delete this->invlists;
+        }
+
+        this->invlists = loaded_invlists;
+        this->own_invlists = true;
+
+        // Synchronize ntotal across all inverted lists
+        size_t total_vectors = 0;
+        for (size_t i = 0; i < this->nlist; i++) {
+            total_vectors += this->invlists->list_size(i);
+        }
+        this->ntotal = total_vectors;
+        this->is_trained = true;
+    }
+}
+
+void IndexIVFFlat::writeToFile(
+        const std::string& index_file,
+        const std::string& dataset_file) const {
+    // ---------------------------------------------------------------------
+    // Step A: Save coarse quantizer index only to index_file
+    // ---------------------------------------------------------------------
+    {
+        FAISS_THROW_IF_NOT_MSG(
+                this->quantizer, "Cannot write index_file: quantizer is null.");
+
+        FileIOWriter writer(index_file.c_str());
+        write_index(this->quantizer, &writer);
+    }
+
+    // ---------------------------------------------------------------------
+    // Step B: Save inverted lists payload to dataset_file
+    // ---------------------------------------------------------------------
+    if (!dataset_file.empty()) {
+        FAISS_THROW_IF_NOT_MSG(
+                this->invlists, "Cannot write dataset: invlists is null.");
+
+        FileIOWriter dataset_writer(dataset_file.c_str());
+        write_InvertedLists(this->invlists, &dataset_writer);
+    }
 }
 
 void IndexIVFFlat::add_core(

@@ -140,7 +140,15 @@ struct IndexHNSW : Index {
 
 struct IndexHNSWFlat : IndexHNSW {
     IndexHNSWFlat();
+    IndexHNSWFlat(
+            const std::string& index_file,
+            const std::string& dataset_file);
     IndexHNSWFlat(int d, int M, MetricType metric = METRIC_L2);
+
+    // if empty string dont save the dataset
+    void writeToFile(
+            const std::string& index_file,
+            const std::string& dataset_file = "") const;
 };
 
 /** Panorama implementation of IndexHNSWFlat following

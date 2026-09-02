@@ -5,6 +5,9 @@
 #include <faiss/impl/AuxIndexStructures.h>
 #include <faiss/impl/DistanceComputer.h>
 #include <faiss/impl/FaissAssert.h>
+#include <faiss/impl/io.h>
+#include <faiss/impl/io_macros.h>
+#include <faiss/index_io.h>
 #include <faiss/utils/Heap.h>
 
 #include <omp.h>
@@ -16,6 +19,8 @@
 #include <iostream>
 
 namespace faiss {
+
+enum LabelIndexType : uint8_t { TYPE_LARGE_LABEL = 1, TYPE_SMALL_LABEL = 2 };
 
 IndexIVFSquared::IndexIVFSquared(
         int dimensions,
@@ -34,6 +39,175 @@ IndexIVFSquared::IndexIVFSquared(
           cut_off_bitvector(cut_off_bitvector),
           efConstruction(efConstruction),
           M(M) {}
+
+void IndexIVFSquared::writeToFile(
+        const std::string& index_file,
+        const std::string& dataset_file) const {
+    // Step A: Write Index state & sub-indexes to index_file
+    {
+        faiss::FileIOWriter writer(index_file.c_str());
+        faiss::IOWriter* f = &writer;
+
+        // 1. Base Index Metadata
+        WRITE1(this->d);
+        WRITE1(this->ntotal);
+        WRITE1(this->verbose);
+        WRITE1(this->is_trained);
+        WRITE1(this->metric_type);
+
+        // 2. IndexIVFSquared Hyperparameters
+        WRITE1(this->cut_off);
+        WRITE1(this->cluster_size);
+        WRITE1(this->cut_off_tiny);
+        WRITE1(this->cut_off_bitvector);
+        WRITE1(this->efConstruction);
+        WRITE1(this->M);
+
+        // 3. Serialize label_indexes (Polymorphic vector)
+        size_t n_labels = this->label_indexes.size();
+        WRITE1(n_labels);
+        for (size_t i = 0; i < n_labels; ++i) {
+            const auto& label_idx = this->label_indexes[i];
+            if (auto* large = dynamic_cast<const IndexLargeLabelShared*>(
+                        label_idx.get())) {
+                uint8_t type = TYPE_LARGE_LABEL;
+                WRITE1(type);
+                write_large_label_shared(*large, f);
+            } else if (
+                    auto* small = dynamic_cast<const IndexSmallLabelShared*>(
+                            label_idx.get())) {
+                uint8_t type = TYPE_SMALL_LABEL;
+                WRITE1(type);
+                write_small_label_shared(*small, f);
+            } else {
+                FAISS_THROW_MSG(
+                        "Unknown ISharedLabelIndex implementation type");
+            }
+        }
+
+        // 4. Serialize membership_bitvector (vector<vector<bool>>)
+        size_t n_bv = this->membership_bitvector.size();
+        WRITE1(n_bv);
+        for (size_t i = 0; i < n_bv; ++i) {
+            // Convert std::vector<bool> to std::vector<uint8_t> for clean
+            // binary output
+            const auto& bv = this->membership_bitvector[i];
+            size_t bv_sz = bv.size();
+            WRITE1(bv_sz);
+            std::vector<uint8_t> buf(bv.begin(), bv.end());
+            WRITEVECTOR(buf);
+        }
+
+        // 5. Serialize two_label_indexes (std::unordered_map)
+        size_t n_map = this->two_label_indexes.size();
+        WRITE1(n_map);
+        for (const auto& [pair, hnsw_ptr] : this->two_label_indexes) {
+            WRITE1(pair.first);  // idx_t 1
+            WRITE1(pair.second); // idx_t 2
+            FAISS_THROW_IF_NOT_MSG(
+                    hnsw_ptr, "IndexHNSWShared inside map cannot be null");
+            write_hnsw_shared(*hnsw_ptr, f);
+        }
+    }
+
+    // Step B: Write raw vectors (storage) to dataset_file
+    if (!dataset_file.empty()) {
+        faiss::FileIOWriter dataset_writer(dataset_file.c_str());
+        faiss::write_index(&this->storage, &dataset_writer);
+    }
+}
+
+IndexIVFSquared::IndexIVFSquared(
+        const std::string& index_file,
+        const std::string& dataset_file) {
+    // Step A: Read raw vector dataset first into storage
+    if (!dataset_file.empty()) {
+        faiss::FileIOReader dataset_reader(dataset_file.c_str());
+        std::unique_ptr<faiss::Index> loaded_storage(
+                faiss::read_index(&dataset_reader));
+
+        auto* loaded_flat =
+                dynamic_cast<faiss::IndexFlat*>(loaded_storage.get());
+        FAISS_THROW_IF_NOT_MSG(
+                loaded_flat,
+                "dataset_file does not contain a valid IndexFlat.");
+
+        this->storage = std::move(*loaded_flat);
+    }
+
+    // Step B: Read index state and sub-indexes from index_file
+    {
+        faiss::FileIOReader reader(index_file.c_str());
+        faiss::IOReader* f = &reader;
+
+        // 1. Base Index Metadata
+        READ1(this->d);
+        READ1(this->ntotal);
+        READ1(this->verbose);
+        READ1(this->is_trained);
+        READ1(this->metric_type);
+
+        // 2. IndexIVFSquared Hyperparameters
+        READ1(this->cut_off);
+        READ1(this->cluster_size);
+        READ1(this->cut_off_tiny);
+        READ1(this->cut_off_bitvector);
+        READ1(this->efConstruction);
+        READ1(this->M);
+
+        // 3. Deserialize label_indexes
+        size_t n_labels = 0;
+        READ1(n_labels);
+        this->label_indexes.resize(n_labels);
+
+        for (size_t i = 0; i < n_labels; ++i) {
+            uint8_t type = 0;
+            READ1(type);
+
+            if (type == TYPE_LARGE_LABEL) {
+                auto large = std::make_unique<IndexLargeLabelShared>();
+                read_large_label_shared(*large, f, &this->storage);
+                this->label_indexes[i] = std::move(large);
+            } else if (type == TYPE_SMALL_LABEL) {
+                auto small = std::make_unique<IndexSmallLabelShared>();
+                read_small_label_shared(*small, f, &this->storage);
+                this->label_indexes[i] = std::move(small);
+            } else {
+                FAISS_THROW_MSG("Unknown label index type tag encountered.");
+            }
+        }
+
+        // 4. Deserialize membership_bitvector
+        size_t n_bv = 0;
+        READ1(n_bv);
+        this->membership_bitvector.resize(n_bv);
+
+        for (size_t i = 0; i < n_bv; ++i) {
+            size_t bv_sz = 0;
+            READ1(bv_sz);
+            std::vector<uint8_t> buf;
+            READVECTOR(buf);
+            this->membership_bitvector[i].assign(buf.begin(), buf.end());
+        }
+
+        // 5. Deserialize two_label_indexes
+        size_t n_map = 0;
+        READ1(n_map);
+        this->two_label_indexes.clear();
+        this->two_label_indexes.reserve(n_map);
+
+        for (size_t i = 0; i < n_map; ++i) {
+            std::pair<idx_t, idx_t> key;
+            READ1(key.first);
+            READ1(key.second);
+
+            auto hnsw_ptr = std::make_shared<IndexHNSWShared>();
+            read_hnsw_shared(*hnsw_ptr, f, &this->storage);
+
+            this->two_label_indexes[key] = std::move(hnsw_ptr);
+        }
+    }
+}
 
 void IndexIVFSquared::add_tags_c(
         idx_t n,

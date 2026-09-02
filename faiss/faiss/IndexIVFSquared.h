@@ -81,6 +81,14 @@ struct IndexIVFSquared : Index {
             int M = 16,
             MetricType metric = METRIC_L2);
 
+    void writeToFile(
+            const std::string& index_file,
+            const std::string& dataset_file = "") const;
+
+    IndexIVFSquared(
+            const std::string& index_file,
+            const std::string& dataset_file);
+
     ~IndexIVFSquared() override = default;
 
     void add(idx_t n, const float* x) override {

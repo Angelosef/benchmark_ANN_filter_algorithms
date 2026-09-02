@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 import numpy as np
-from src.analysis.utils import find_selectivity_path, load_run_data
+from src.analysers.utils import find_selectivity_path, load_run_data
 
 class CrossEvaluator:
     def __init__(self, log_root_dir="logs", output_dir="analysis"):

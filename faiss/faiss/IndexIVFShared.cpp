@@ -8,6 +8,47 @@
 #include <faiss/impl/FaissAssert.h>
 #include <faiss/impl/FaissException.h>
 
+#include <faiss/impl/io.h>
+#include <faiss/impl/io_macros.h>
+#include <faiss/index_io.h>
+
+void faiss::write_ivf_shared(
+        const faiss::IndexIVFShared& ivf_idx,
+        faiss::IOWriter* f) {
+    WRITE1(ivf_idx.d);
+    WRITE1(ivf_idx.nlist);
+    WRITE1(ivf_idx.metric_type);
+    WRITE1(ivf_idx.is_trained);
+    WRITE1(ivf_idx.verbose);
+
+    // Write Quantizer index
+    FAISS_THROW_IF_NOT_MSG(ivf_idx.quantizer, "Quantizer cannot be null");
+    write_index(ivf_idx.quantizer.get(), f);
+
+    // Write Inverted Lists payload
+    FAISS_THROW_IF_NOT_MSG(ivf_idx.invlists, "Inverted lists cannot be null");
+    write_InvertedLists(ivf_idx.invlists.get(), f);
+}
+
+void faiss::read_ivf_shared(
+        faiss::IndexIVFShared& ivf_idx,
+        faiss::IOReader* f,
+        const faiss::Index* storage) {
+    ivf_idx.storage = storage;
+
+    READ1(ivf_idx.d);
+    READ1(ivf_idx.nlist);
+    READ1(ivf_idx.metric_type);
+    READ1(ivf_idx.is_trained);
+    READ1(ivf_idx.verbose);
+
+    // Read Quantizer index
+    ivf_idx.quantizer.reset(read_index(f));
+
+    // Read Inverted Lists
+    ivf_idx.invlists.reset(read_InvertedLists(f));
+}
+
 namespace faiss {
 
 IndexIVFShared::IndexIVFShared(

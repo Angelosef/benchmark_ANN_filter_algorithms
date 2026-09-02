@@ -10,6 +10,7 @@
 #include <faiss/utils/utils.h>
 
 #include <faiss/impl/DistanceComputer.h>
+#include <faiss/impl/io.h>
 
 namespace faiss {
 
@@ -46,6 +47,7 @@ struct IndexHNSWShared {
     int M = 16;
 
     IndexHNSWShared(const Index* storage, int efConstruction, int M);
+    IndexHNSWShared() = default;
     ~IndexHNSWShared() = default;
     void add(const std::vector<idx_t>& new_ids);
     void search(
@@ -56,6 +58,14 @@ struct IndexHNSWShared {
             idx_t* labels,
             const SearchParameters* params = nullptr) const;
 };
+
+void write_hnsw_shared(const IndexHNSWShared& hnsw_idx, IOWriter* f);
+
+void read_hnsw_shared(
+        IndexHNSWShared& hnsw_idx,
+        IOReader* f,
+        const Index* storage);
+
 } // namespace faiss
 
 #endif

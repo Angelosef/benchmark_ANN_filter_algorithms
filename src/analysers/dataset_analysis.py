@@ -7,7 +7,7 @@ import seaborn as sns
 
 import src.datasets.all_datasets
 from src.datasets.base_dataset import Dataset
-from src.analysis.utils import find_selectivity_path
+from src.analysers.utils import find_selectivity_path
 
 
 class DatasetAnalyser:

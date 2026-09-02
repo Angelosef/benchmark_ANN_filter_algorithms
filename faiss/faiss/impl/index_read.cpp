@@ -1282,7 +1282,7 @@ static void validate_HNSW(const HNSW& hnsw) {
     }
 }
 
-static void read_HNSW(HNSW& hnsw, IOReader* f) {
+void read_HNSW(HNSW& hnsw, IOReader* f) {
     READVECTOR(hnsw.assign_probas);
     READVECTOR(hnsw.cum_nneighbor_per_level);
     READVECTOR(hnsw.levels);

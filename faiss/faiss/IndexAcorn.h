@@ -4,6 +4,7 @@
 #include <faiss/Index.h>
 #include <faiss/IndexFlat.h>
 #include <faiss/impl/HierarchicalGraph.h>
+#include <memory>
 #include <random>
 #include <vector>
 
@@ -15,6 +16,10 @@ struct SearchParametersAcorn : SearchParameters {
 };
 
 struct IndexAcorn : Index {
+   private:
+    std::unique_ptr<HierarchicalGraph> graph;
+
+   public:
     IndexFlat storage;
     int efConstruction;
     int gamma;
@@ -22,7 +27,6 @@ struct IndexAcorn : Index {
     int Mbeta;
     float ml;
 
-    HierarchicalGraph graph;
     std::mt19937 rng;
 
     explicit IndexAcorn(
@@ -32,6 +36,11 @@ struct IndexAcorn : Index {
             int M,
             int Mbeta,
             MetricType metric = METRIC_L2);
+
+    IndexAcorn(const std::string& index_file, const std::string& dataset_file);
+    void writeToFile(
+            const std::string& index_file,
+            const std::string& dataset_file = "") const;
 
     ~IndexAcorn() override = default;
 
@@ -72,10 +81,6 @@ struct IndexAcorn : Index {
             idx_t entry_node,
             const float* vec,
             int results_size) const;
-
-    idx_t getFurthest(int layer, std::vector<idx_t> candidates, idx_t target);
-
-    bool addEdgeConditionally(int layer, idx_t new_node, idx_t candidate_node);
 };
 
 } // namespace faiss

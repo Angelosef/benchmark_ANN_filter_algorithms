@@ -13,24 +13,34 @@ struct HierarchicalGraph {
     std::vector<std::deque<omp_lock_t>> node_locks;
     omp_lock_t expansion_lock;
 
+    bool addDirectedEdge(int layer, idx_t node1, idx_t node2);
+    int find_index(int layer, idx_t node, idx_t vector_id) const;
+    bool removeDirectedEdge(int layer, idx_t node1, idx_t node2);
+    float calcDistance(int layer, idx_t node1, idx_t node2) const;
+
    public:
+    Index* storage;
+    int M;
+    int Mbeta;
+    int gamma;
+    size_t max_neighbors;
     // std::deque ensures element pointers remain valid upon expansion
     std::vector<std::deque<std::vector<idx_t>>> graph;
     std::vector<std::deque<idx_t>> indexes;
     std::vector<std::deque<idx_t>> downwards_edges;
 
-    HierarchicalGraph();
+    HierarchicalGraph(Index* storage, int M, int Mbeta, int gamma);
+    HierarchicalGraph() = default;
+
     ~HierarchicalGraph();
 
     idx_t addNode(int node_layer, idx_t index);
-    void addEdge(int layer, idx_t node1, idx_t node2);
-    void removeEdge(int layer, idx_t node1, idx_t node2);
-    bool tryReplaceEdge(
+    void addInitialEdges(
             int layer,
-            idx_t node,
-            idx_t node_to_remove,
-            idx_t node_to_add,
-            size_t max_neighbors);
+            idx_t new_node,
+            std::vector<idx_t> candidates);
+    void addInitialBottomEdges(idx_t new_node, std::vector<idx_t> candidates);
+    void twoHopPruning(int layer, idx_t node);
 
     const std::vector<idx_t>& getNeighbors(int layer, idx_t node) const;
     const std::vector<idx_t> getNeighborsSafe(int layer, idx_t node) const;

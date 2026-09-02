@@ -5,6 +5,28 @@
 #include <faiss/Index.h>
 #include <faiss/IndexLargeLabelShared.h>
 
+#include <faiss/IndexHNSWShared.h>
+#include <faiss/IndexIVFShared.h>
+#include <faiss/impl/io.h>
+#include <faiss/impl/io_macros.h>
+
+void faiss::write_large_label_shared(
+        const faiss::IndexLargeLabelShared& idx,
+        faiss::IOWriter* f) {
+    WRITE1(idx.ntotal);
+    faiss::write_hnsw_shared(idx.hnsw_index, f);
+    faiss::write_ivf_shared(idx.ivf_index, f);
+}
+
+void faiss::read_large_label_shared(
+        faiss::IndexLargeLabelShared& idx,
+        faiss::IOReader* f,
+        const faiss::Index* storage) {
+    READ1(idx.ntotal);
+    faiss::read_hnsw_shared(idx.hnsw_index, f, storage);
+    faiss::read_ivf_shared(idx.ivf_index, f, storage);
+}
+
 namespace faiss {
 
 IndexLargeLabelShared::IndexLargeLabelShared(

@@ -8,6 +8,22 @@
 #include <limits>
 #include <queue>
 
+#include <faiss/impl/io.h>
+#include <faiss/impl/io_macros.h>
+
+void faiss::write_small_label_shared(
+        const faiss::IndexSmallLabelShared& idx,
+        faiss::IOWriter* f) {
+    WRITEVECTOR(idx.ids);
+}
+
+void faiss::read_small_label_shared(
+        faiss::IndexSmallLabelShared& idx,
+        faiss::IOReader* f,
+        const faiss::Index* storage) {
+    READVECTOR(idx.ids);
+}
+
 namespace faiss {
 
 void IndexSmallLabelShared::add(const std::vector<idx_t>& new_ids) {

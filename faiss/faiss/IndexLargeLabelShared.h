@@ -11,10 +11,12 @@
 #include "IndexHNSWShared.h"
 #include "IndexIVFShared.h"
 
+#include <faiss/impl/io.h>
+
 namespace faiss {
 
 class IndexLargeLabelShared : public ISharedLabelIndex {
-   private:
+   public:
     const Index* storage;
     IndexHNSWShared hnsw_index;
     IndexIVFShared ivf_index;
@@ -26,6 +28,8 @@ class IndexLargeLabelShared : public ISharedLabelIndex {
             size_t nlist = 64,
             int efConstruction = 128,
             int M = 16);
+
+    IndexLargeLabelShared() = default;
 
     // Train the internal IVF quantizer before adding vectors
     void train_from_storage(const std::vector<idx_t>& sample_ids);
@@ -47,6 +51,13 @@ class IndexLargeLabelShared : public ISharedLabelIndex {
 
     size_t size() const override;
 };
+
+void write_large_label_shared(const IndexLargeLabelShared& idx, IOWriter* f);
+
+void read_large_label_shared(
+        IndexLargeLabelShared& idx,
+        IOReader* f,
+        const Index* storage);
 
 } // namespace faiss
 

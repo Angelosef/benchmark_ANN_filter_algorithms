@@ -13,6 +13,41 @@
 #include <faiss/utils/random.h>
 #include <faiss/utils/utils.h>
 
+#include <faiss/impl/io.h>
+#include <faiss/impl/io_macros.h>
+#include <faiss/index_io.h>
+
+void faiss::write_hnsw_shared(
+        const faiss::IndexHNSWShared& hnsw_idx,
+        faiss::IOWriter* f) {
+    // Write graph topology using standard Faiss HNSW serializer
+    write_HNSW(&hnsw_idx.graph, f);
+
+    // Write ids vector
+    WRITEVECTOR(hnsw_idx.ids);
+
+    // Write hyperparameters
+    WRITE1(hnsw_idx.efContrsuction);
+    WRITE1(hnsw_idx.M);
+}
+
+void faiss::read_hnsw_shared(
+        faiss::IndexHNSWShared& hnsw_idx,
+        faiss::IOReader* f,
+        const faiss::Index* storage) {
+    hnsw_idx.storage = storage;
+
+    // Read graph topology using standard Faiss HNSW deserializer
+    read_HNSW(hnsw_idx.graph, f);
+
+    // Read ids vector
+    READVECTOR(hnsw_idx.ids);
+
+    // Read hyperparameters
+    READ1(hnsw_idx.efContrsuction);
+    READ1(hnsw_idx.M);
+}
+
 namespace faiss {
 
 namespace {

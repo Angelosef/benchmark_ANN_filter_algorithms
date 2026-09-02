@@ -13,6 +13,8 @@
 #include <cstdio>
 #include <memory>
 
+#include <faiss/impl/HNSW.h>
+#include <faiss/impl/io.h>
 #include <faiss/impl/platform_macros.h>
 
 /** I/O functions can read/write to a filename, a file handle or to an
@@ -152,6 +154,9 @@ size_t get_deserialization_lattice_r2_limit();
 // NOT thread-safe: set before any concurrent deserialization calls
 // and do not modify while deserialization is in progress on other threads.
 void set_deserialization_lattice_r2_limit(size_t value);
+
+void write_HNSW(const HNSW* hnsw, IOWriter* f);
+void read_HNSW(HNSW& hnsw, IOReader* f);
 
 } // namespace faiss
 

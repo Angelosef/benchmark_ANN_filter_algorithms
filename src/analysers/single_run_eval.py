@@ -1,7 +1,7 @@
 import os
 import matplotlib.pyplot as plt
 import numpy as np
-from src.analysis.utils import load_run_data, find_selectivity_path
+from src.analysers.utils import load_run_data, find_selectivity_path
 from src.logger import BenchmarkLogger
 import json
 

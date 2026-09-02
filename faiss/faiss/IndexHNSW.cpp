@@ -34,6 +34,14 @@
 #include <faiss/utils/random.h>
 #include <faiss/utils/sorting.h>
 
+#include <faiss/IndexFlat.h>
+#include <faiss/IndexHNSW.h>
+#include <faiss/impl/FaissAssert.h>
+#include <faiss/impl/io.h>
+#include <faiss/index_io.h>
+#include <memory>
+#include <string>
+
 namespace faiss {
 
 using storage_idx_t = HNSW::storage_idx_t;
@@ -712,6 +720,66 @@ IndexHNSWFlat::IndexHNSWFlat(int d_in, int M, MetricType metric)
                   M) {
     own_fields = true;
     is_trained = true;
+}
+
+IndexHNSWFlat::IndexHNSWFlat(
+        const std::string& index_file,
+        const std::string& dataset_file) {
+    // Step A: Load HNSW graph (without storage)
+    {
+        FileIOReader reader(index_file.c_str());
+        // IO_FLAG_SKIP_STORAGE tells Faiss that storage will be supplied
+        // separately
+        std::unique_ptr<Index> loaded_index(
+                read_index(&reader, IO_FLAG_SKIP_STORAGE));
+
+        // Downcast to IndexHNSW
+        auto* loaded_hnsw = dynamic_cast<IndexHNSW*>(loaded_index.get());
+        FAISS_THROW_IF_NOT_MSG(
+                loaded_hnsw, "Failed to load valid IndexHNSW from file.");
+
+        // Steal state from loaded object
+        this->d = loaded_hnsw->d;
+        this->ntotal = loaded_hnsw->ntotal;
+        this->verbose = loaded_hnsw->verbose;
+        this->is_trained = loaded_hnsw->is_trained;
+        this->metric_type = loaded_hnsw->metric_type;
+        this->hnsw = std::move(loaded_hnsw->hnsw);
+
+        // Release original storage created by base constructor if any
+        delete this->storage;
+        this->storage = nullptr;
+        this->own_fields = true;
+    }
+
+    // Step B: Load dataset file if provided
+    if (!dataset_file.empty()) {
+        FileIOReader dataset_reader(dataset_file.c_str());
+        this->storage = read_index(&dataset_reader);
+        FAISS_THROW_IF_NOT_MSG(
+                this->storage->ntotal == this->ntotal,
+                "Dataset vector count does not match HNSW graph vector count!");
+    }
+}
+
+void IndexHNSWFlat::writeToFile(
+        const std::string& index_file,
+        const std::string& dataset_file) const {
+    // Step A: Write the HNSW graph (skipping storage payload)
+    {
+        FileIOWriter writer(index_file.c_str());
+        // IO_FLAG_SKIP_STORAGE replaces storage with a null placeholder in
+        // output stream
+        write_index(this, &writer, IO_FLAG_SKIP_STORAGE);
+    }
+
+    // Step B: Write the dataset file separately if path is specified
+    if (!dataset_file.empty()) {
+        FAISS_THROW_IF_NOT_MSG(
+                this->storage, "Cannot write dataset: storage is null.");
+        FileIOWriter dataset_writer(dataset_file.c_str());
+        write_index(this->storage, &dataset_writer);
+    }
 }
 
 /**************************************************************
