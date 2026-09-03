@@ -11,6 +11,9 @@ class BruteForceIdFilter(BaseANNIndex):
     def name(self):
         return self.algo_name
 
+    def save_to_files(self, ds_file, index_file):
+        print("saving to files not implemented for brute force")
+
 # --- BUILD STRATEGIES ---
 
 @BruteForceIdFilter.register_build("structured")

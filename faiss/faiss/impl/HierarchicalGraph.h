@@ -55,6 +55,7 @@ struct HierarchicalGraph {
 
     void clear();
     void print() const;
+    std::vector<float> avg_num_neighbors() const;
 };
 
 } // namespace faiss

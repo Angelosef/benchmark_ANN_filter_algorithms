@@ -15,5 +15,6 @@ if __name__ == "__main__":
 
     for run_directory in run_dirs:
         logger.log_recall(run_directory)
-
         logger.log_latency_stats(run_directory)
+        logger.log_file_memory(run_directory)
+        logger.copy_construction_metrics(run_directory)

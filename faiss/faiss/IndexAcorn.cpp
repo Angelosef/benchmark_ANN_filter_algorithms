@@ -161,15 +161,17 @@ void IndexAcorn::add(idx_t n, const float* x) {
 
 #pragma omp for schedule(dynamic, 100)
         for (idx_t i = 0; i < n; i++) {
-            //    std::cout << "adding node of index " << i << std::endl;
-
             idx_t index = offset + i;
             const float* vec = x + i * this->d;
 
             this->addSingle(index, vec, local_rng);
         }
     }
-    // this->graph->print();
+    std::vector<float> avg_edges = this->graph->avg_num_neighbors();
+    for (int i = 0; i < avg_edges.size(); i++) {
+        std::cout << "layer " << i << "avg edge count = " << avg_edges[i]
+                  << std::endl;
+    }
 
     this->ntotal = this->storage.ntotal;
 }
@@ -213,7 +215,7 @@ void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
             for (int i = 0; i < new_neighbors.size(); i++) {
                 bool prune_node = sample_bernoulli(rng, this->M);
                 if (prune_node) {
-                    this->graph->twoHopPruning(layer, new_neighbors[i]);
+                    // this->graph->twoHopPruning(layer, new_neighbors[i]);
                 }
             }
         }

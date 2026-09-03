@@ -9,7 +9,7 @@ def bench_sift(nr):
 
     build_params = [AcornBuildParameters(M=16, gamma=12, M_beta=32, efConstruction=16)]
     gamma = generateLogGrid(36, 36, 1)
-    efSearch = generateLogGrid(12, 12, 1)
+    efSearch = generateLogGrid(12, 64, 3)
     if nr==1:
         gamma = generateLogGrid(12, 12, 1)
     if nr==3:
@@ -47,7 +47,7 @@ def bench_yfcc():
     ds = yfccDataset(subset_size=0.1, neighbors_retrieved=10)
         
     build_params = [AcornBuildParameters(M=16, gamma=12, M_beta=32, efConstruction=16)]
-    gamma = generateLogGrid(12, 32, 2)
+    gamma = generateLogGrid(32, 32, 1)
     efSearch = generateLogGrid(12, 64, 3)
 
     build_params = [
@@ -80,10 +80,10 @@ def bench_gist():
 
 
 if __name__=="__main__":
-    test_sift = True
-    test_glove = True
+    test_sift = False
+    test_glove = False
     test_yfcc = True
-    test_gist = True
+    test_gist = False
 
     if test_sift:
         

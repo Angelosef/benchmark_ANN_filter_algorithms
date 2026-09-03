@@ -22,6 +22,11 @@ class Acorn(BaseANNIndex):
     def name(self):
         return self.algo_name
 
+    def save_to_files(self, ds_file, index_file):
+        if ds_file is None:
+            ds_file = ""
+        self.index.writeToFile(index_file, ds_file)
+
 # --- BUILD STRATEGIES ---
 
 @Acorn.register_build("structured")
@@ -37,6 +42,13 @@ def build_structured(self, vectors, attributes, parameters):
         faiss.METRIC_L2
     )
     self.index.add(vectors)
+
+@Acorn.register_build_from_files("structured")
+def build_from_files_structured(self, ds_file, index_file, attributes, parameters):
+    self.attribute_index = AttributeIndex(attributes)
+    self.build_params = parameters
+    self.index = faiss.IndexAcorn(index_file, ds_file)
+    return
 
 # --- QUERY STRATEGIES ---
 @Acorn.register_init_query("structured", "conjunction")
@@ -115,6 +127,14 @@ def build_sparse(self, vectors, attributes, parameters):
             faiss.METRIC_L2
         )
     self.index.add(vectors)
+    return
+
+@Acorn.register_build_from_files("sparse")
+def build_from_files_sparse(self, ds_file, index_file, attributes, parameters):
+    self.base_attributes_csc = attributes.tocsc()
+    self.build_params = parameters
+
+    self.index = faiss.IndexAcorn(index_file, ds_file)
     return
 
 @Acorn.register_init_query("sparse", "conjunction")

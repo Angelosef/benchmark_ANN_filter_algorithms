@@ -21,6 +21,11 @@ class HNSWPostfilter(BaseANNIndex):
     def name(self):
         return self.algo_name
 
+    def save_to_files(self, ds_file, index_file):
+        if ds_file is None:
+            ds_file = ""
+        self.index.writeToFile(index_file, ds_file)
+
 @HNSWPostfilter.register_build("structured")
 def build_structured(self, vectors, attributes, parameters):
     self.base_attributes = attributes
@@ -29,6 +34,15 @@ def build_structured(self, vectors, attributes, parameters):
     self.index = faiss.IndexHNSWFlat(self.dim, self.build_parameters.graph_degree, faiss.METRIC_L2)
     self.index.hnsw.efConstruction = self.build_parameters.efConstruction
     self.index.add(vectors)
+    return
+
+@HNSWPostfilter.register_build_from_files("structured")
+def build_from_files_structured(self, ds_file, index_file, attributes, parameters):
+    self.base_attributes = attributes
+    self.build_parameters = parameters
+
+    self.index = faiss.IndexHNSWFlat(index_file, ds_file)
+
     return
 
 @HNSWPostfilter.register_init_query("structured", "conjunction")
@@ -103,6 +117,15 @@ def build_sparse(self, vectors, attributes, parameters):
     self.index = faiss.IndexHNSWFlat(self.dim, self.build_parameters.graph_degree, faiss.METRIC_L2)
     self.index.hnsw.efConstruction = self.build_parameters.efConstruction
     self.index.add(vectors)
+    return
+
+@HNSWPostfilter.register_build_from_files("sparse")
+def build_from_files_sparse(self, ds_file, index_file, attributes, parameters):
+    self.base_attributes = attributes
+    self.base_attributes.sort_indices()
+    self.build_parameters = parameters
+
+    self.index = faiss.IndexHNSWFlat(index_file, ds_file)
     return
 
 @HNSWPostfilter.register_init_query("sparse", "conjunction")

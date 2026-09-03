@@ -4,6 +4,7 @@ import time
 from typing import Type
 import os, psutil
 import resource
+from src.benchmark.save_manager import SaveManager
 
 def get_rss():
     return psutil.Process(os.getpid()).memory_info().rss
@@ -22,26 +23,58 @@ class BenchmarkRunner:
         self.dim = self.dataset.get_dim()
         self.metric = self.dataset.get_metric()
         self.config = self.dataset.get_config()
+        self.save_manager = SaveManager()
         
         self.index = self.index_class(dim=self.dim, metric=self.metric)
         
     def run(self):
         baseline_mem = get_rss()
-        initial_peak = get_peak_memory()
 
-        print("start building index")
-        start_build = time.time()
-        self.index.build(
-            self.dataset.get_base_vectors(), 
-            self.dataset.get_base_attributes(), 
-            self.build_params, 
-            self.config
+        ds_file, index_file = self.save_manager.find_saved_files(
+            self.index.name(),
+            self.build_params,
+            self.dataset.get_name(),
+            self.dataset.get_subset_size()
         )
-        build_time = time.time() - start_build
+        built_from_file = False
+        build_time = None
+        index_memory = None
+        build_memory_peak = None
 
-        after_build_mem = get_rss()
-        index_memory = after_build_mem - baseline_mem
-        print(f"Index Memory: {index_memory / 1e6:.2f} MB")
+        if (not (ds_file is None or index_file is None)):
+            print("index is already built - use saved version")
+            built_from_file = True
+            self.index.build_from_files(
+                ds_file,
+                index_file,
+                self.dataset.get_base_attributes(),
+                self.build_params,
+                self.config
+            )
+        else:
+            print("building from scratch")
+            start_build = time.time()
+            self.index.build(
+                self.dataset.get_base_vectors(), 
+                self.dataset.get_base_attributes(), 
+                self.build_params, 
+                self.config
+            )
+            build_time = time.time() - start_build
+
+            after_build_mem = get_rss()
+            index_memory = after_build_mem - baseline_mem
+            build_peak = get_peak_memory()
+            build_memory_peak = build_peak - baseline_mem
+            print(f"Index Memory: {index_memory / 1e6:.2f} MB")
+            ds_file, index_file = self.save_manager.prepare_folders(
+                self.index.name(),
+                self.build_params,
+                self.dataset.get_name(),
+                self.dataset.get_subset_size()
+            )
+            print("saving index to: ", ds_file, " - ", index_file)
+            self.index.save_to_files(ds_file, index_file)
 
         print("start querying")
         start_query = time.time()
@@ -59,11 +92,13 @@ class BenchmarkRunner:
         metadata = {
             "index_name": self.index.name(),
             "dataset_name": self.dataset.get_name(),
+            "built_from_file": built_from_file,
             "build_time": build_time,
             "query_time": query_time,
             "total_query_time": total_query_time,
+            "baseline_memory": baseline_mem,
             "index_memory": index_memory,
-            "initial_peak": initial_peak,
+            "build_memory_peak": build_memory_peak,
             "peak_memory": final_peak,
             "peak_memory_overhead": peak_memory_overhead,
             "build_params": vars(self.build_params),

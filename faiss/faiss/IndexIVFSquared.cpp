@@ -120,6 +120,7 @@ void IndexIVFSquared::writeToFile(
 IndexIVFSquared::IndexIVFSquared(
         const std::string& index_file,
         const std::string& dataset_file) {
+    std::cout << "reading from file: " << index_file << std::endl;
     // Step A: Read raw vector dataset first into storage
     if (!dataset_file.empty()) {
         faiss::FileIOReader dataset_reader(dataset_file.c_str());

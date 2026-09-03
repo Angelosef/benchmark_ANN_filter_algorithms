@@ -15,7 +15,43 @@
 
 #include <faiss/impl/io.h>
 #include <faiss/impl/io_macros.h>
-#include <faiss/index_io.h>
+// #include <faiss/index_io.h>
+
+#include <iostream>
+
+void write_HNSW(const faiss::HNSW* hnsw, faiss::IOWriter* f) {
+    WRITEVECTOR(hnsw->assign_probas);
+    WRITEVECTOR(hnsw->cum_nneighbor_per_level);
+    WRITEVECTOR(hnsw->levels);
+    WRITEVECTOR(hnsw->offsets);
+    WRITEVECTOR(hnsw->neighbors);
+
+    WRITE1(hnsw->entry_point);
+    WRITE1(hnsw->max_level);
+    WRITE1(hnsw->efConstruction);
+    WRITE1(hnsw->efSearch);
+
+    // Deprecated field write (required by Faiss binary format layout)
+    constexpr int tmp_upper_beam = 1;
+    WRITE1(tmp_upper_beam);
+}
+
+void read_HNSW(faiss::HNSW& hnsw, faiss::IOReader* f) {
+    READVECTOR(hnsw.assign_probas);
+    READVECTOR(hnsw.cum_nneighbor_per_level);
+    READVECTOR(hnsw.levels);
+    READVECTOR(hnsw.offsets);
+    READVECTOR(hnsw.neighbors); // Use READVECTOR instead of read_vector
+
+    READ1(hnsw.entry_point);
+    READ1(hnsw.max_level);
+    READ1(hnsw.efConstruction);
+    READ1(hnsw.efSearch);
+
+    // Read deprecated upper_beam dummy value
+    int dummy_upper_beam = 0;
+    READ1(dummy_upper_beam);
+}
 
 void faiss::write_hnsw_shared(
         const faiss::IndexHNSWShared& hnsw_idx,

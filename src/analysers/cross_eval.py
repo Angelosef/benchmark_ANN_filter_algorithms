@@ -43,7 +43,6 @@ class CrossEvaluator:
             metadata_path = os.path.join(self.log_root, run_id, 'metadata.json')
             details = load_run_data(metadata_path)
             if details:
-                details['memory_gb'] = details['index_memory'] / (1024**3)
                 run_details.append(details)
         
         return pd.DataFrame(run_details)
@@ -392,48 +391,129 @@ class CrossEvaluator:
         plt.savefig(fname, bbox_inches='tight', dpi=300)
         plt.close()
 
-    def plot_resource_usage(self, df, dataset_name, subset_size, ds_query_param):
-        """Creates bar charts for Build Time and Memory usage."""
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    def plot_memory_usage(self, df, dataset_name, subset_size):
+        """
+        Creates a grouped bar plot comparing index_memory, build_memory_peak, 
+        and index_file_size_bytes (converted to GB) across different index_names.
+        """
+        # 1. Filter DataFrame for the target dataset and subset size (if needed)
+        filtered_df = df[
+            (df['dataset_name'] == dataset_name) & 
+            (df['subset_size'] == subset_size)
+        ].copy()
+
+        if filtered_df.empty:
+            print(f"No data available for {dataset_name} ({subset_size})")
+            return
+
+        BYTES_TO_GB = 1024 ** 3
+
+        # 2. Convert memory metrics from bytes to GB
+        filtered_df['Index Memory (GB)'] = filtered_df['index_memory'] / BYTES_TO_GB
+        filtered_df['Peak Build Memory (GB)'] = filtered_df['build_memory_peak'] / BYTES_TO_GB
+        
+        # Handle index_file_size column name fallback (e.g., index_file_size vs index_file_size_bytes)
+        file_size_col = 'index_file_size_bytes' if 'index_file_size_bytes' in filtered_df.columns else 'index_file_size'
+        filtered_df['Index File Size (GB)'] = filtered_df[file_size_col] / BYTES_TO_GB
+
+        # 3. Reshape DataFrame to long format for Seaborn grouped bar plotting
+        metric_cols = ['Index Memory (GB)', 'Peak Build Memory (GB)', 'Index File Size (GB)']
+        
+        melted_df = filtered_df.melt(
+            id_vars=['index_name'],
+            value_vars=metric_cols,
+            var_name='Memory Metric',
+            value_name='Gigabytes (GB)'
+        )
+
+        # 4. Create Plot
+        plt.figure(figsize=(10, 6))
+        
+        colors = self._get_color_map(df['index_name'])
+
+        ax = sns.barplot(
+            data=melted_df,
+            x='Memory Metric',
+            y='Gigabytes (GB)',
+            hue='index_name',
+            palette=colors,
+            errorbar='sd'
+        )
+
+        # Formatting
+        plt.title(f"Memory Usage Overview - {dataset_name} ({subset_size})", fontsize=13, fontweight='bold')
+        plt.ylabel("Memory (GB)", fontsize=11)
+        plt.xlabel("")
+        plt.grid(True, axis='y', linestyle='--', alpha=0.5)
+        plt.legend(title="Index Type", bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.tight_layout()
+
+        # 5. Save figure
+        os.makedirs(self.plot_dir, exist_ok=True)
+        filename = f"{dataset_name}_{subset_size}_memory.png"
+        save_path = os.path.join(self.plot_dir, filename)
+        
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+        print(f"Plot saved to: {save_path}")
+        return save_path
+
+    def plot_tti_memory(self, df, dataset_name, subset_size):
+        """
+        Plots Build Time vs. Index Memory in a 2D scatter plot with points colored by index_name.
+        """
+        # 1. Filter DataFrame for target dataset and subset size
+        filtered_df = df[
+            (df['dataset_name'] == dataset_name) & 
+            (df['subset_size'] == subset_size)
+        ].copy()
+
+        if filtered_df.empty:
+            print(f"No data available for {dataset_name} ({subset_size})")
+            return
+
+        BYTES_TO_GB = 1024 ** 3
+
+        # 2. Convert Index Memory to GB
+        filtered_df['index_memory_gb'] = filtered_df['index_memory'] / BYTES_TO_GB
+
+        # 3. Create Plot
+        plt.figure(figsize=(9, 6))
 
         colors = self._get_color_map(df['index_name'])
 
-        # Build Time Bar Chart
-        sns.barplot(
-            data=df, 
-            x='index_name', 
-            y='build_time', 
+        # Plot 2D scatter points
+        ax = sns.scatterplot(
+            data=filtered_df,
+            x='build_time',
+            y='index_memory_gb',
             hue='index_name',
-            errorbar='sd',
-            legend=False,
-            ax=ax1, 
-            palette=colors
+            style='index_name',  # Uses distinct marker shapes per index_name
+            palette=colors,
+            s=120,               # Marker size
+            alpha=0.85
         )
-        ax1.set_title("Average Build Time")
-        ax1.set_ylabel("Seconds")
-        ax1.tick_params(axis='x', rotation=45)
 
-        # Memory Usage Bar Chart
-        sns.barplot(
-            data=df, 
-            x='index_name', 
-            y='memory_gb', 
-            hue='index_name',
-            errorbar='sd',
-            legend=False,
-            ax=ax2, 
-            palette=colors
-        )
-        ax2.set_title("Average Index Memory")
-        ax2.set_ylabel("GB")
-        ax2.tick_params(axis='x', rotation=45)
-
-        plt.suptitle(f"Resource Consumption: {dataset_name} (Subset: {subset_size}) (parameter: {ds_query_param})")
+        # Formatting
+        plt.title(f"Build Time vs. Index Memory - {dataset_name} ({subset_size})", fontsize=13, fontweight='bold')
+        plt.xlabel("Build Time (Seconds)", fontsize=11)
+        plt.ylabel("Index Memory (GB)", fontsize=11)
+        plt.grid(True, linestyle='--', alpha=0.5)
+        plt.legend(title="Index Type", bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.tight_layout()
-        
-        fname = os.path.join(self.plot_dir, f"{dataset_name}_{subset_size}_{ds_query_param}_resources.png")
-        plt.savefig(fname, bbox_inches='tight')
+
+        # 4. Save figure
+        os.makedirs(self.plot_dir, exist_ok=True)
+        filename = f"{dataset_name}_{subset_size}_tti_memory.png"
+        save_path = os.path.join(self.plot_dir, filename)
+
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
+
+        print(f"Plot saved to: {save_path}")
+        return save_path
+        
 
     def plot(self, dataset_name, subset_size, ds_query_param=None):
         """Main interface to generate all plots for a specific benchmark."""
@@ -447,11 +527,12 @@ class CrossEvaluator:
         p_suffix = f"_p{ds_query_param}" if ds_query_param is not None else ""
         self.plot_recall_vs_latency(df, dataset_name, subset_size, p_suffix)
         self.plot_recall_vs_qps(df, dataset_name, subset_size, p_suffix)
-        self.plot_resource_usage(df, dataset_name, subset_size, p_suffix)
+        self.plot_tti_memory(df, dataset_name, subset_size)
+        self.plot_memory_usage(df, dataset_name, subset_size)
         print(f"Done! Plots saved in: {self.plot_dir}")
         return
 
-def generate_cross_eval_plots(test_sift=True, test_glove=True, test_yfcc=True, test_gist=True):
+def generate_cross_eval_plots(test_sift=False, test_glove=True, test_yfcc=True, test_gist=False):
     evaluator = CrossEvaluator()
     
     if test_sift:
@@ -459,7 +540,7 @@ def generate_cross_eval_plots(test_sift=True, test_glove=True, test_yfcc=True, t
             evaluator.plot(dataset_name="SIFT", subset_size=1.0, ds_query_param=num_restrictions)
 
     if test_glove:
-        evaluator.plot(dataset_name="GLOVE", subset_size=1.0, ds_query_param=None)
+        evaluator.plot(dataset_name="GLOVE", subset_size=0.1, ds_query_param=None)
 
     if test_yfcc:
         evaluator.plot(dataset_name="YFCC", subset_size=0.1, ds_query_param=None)
@@ -492,5 +573,5 @@ def generate_cross_eval_tables(test_sift=True, test_glove=True, test_yfcc=True, 
         evaluator.generate_speed_up_table_selectivity(ds_name='GIST', ds_subset_size=1.0, ds_query_param=None, baseline_index=baseline_index, target_recalls=target_recalls)
 
 if __name__ == '__main__':
-    # generate_cross_eval_plots()
-    generate_cross_eval_tables()
+    generate_cross_eval_plots()
+    # generate_cross_eval_tables()

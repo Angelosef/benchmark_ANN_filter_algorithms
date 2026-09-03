@@ -20,6 +20,11 @@ class IVFIdFilter(BaseANNIndex):
     def name(self):
         return self.algo_name
 
+    def save_to_files(self, ds_file, index_file):
+        if ds_file is None:
+            ds_file = ""
+        self.index.writeToFile(index_file, ds_file)
+
 @IVFIdFilter.register_build("structured")
 def build_structured(self, vectors, attributes, parameters):
     self.build_parameters = parameters
@@ -28,9 +33,16 @@ def build_structured(self, vectors, attributes, parameters):
 
     quantizer = faiss.IndexFlatL2(self.dim)
     self.index = faiss.IndexIVFFlat(quantizer, self.dim, self.build_parameters.nlist)
-    train_size = int(len(vectors) * 0.1)
+    train_size = int(len(vectors) * 0.5)
     self.index.train(vectors[:train_size])
     self.index.add(vectors)
+    return
+
+@IVFIdFilter.register_build_from_files("structured")
+def build_from_files_structured(self, ds_file, index_file, attributes, parameters):
+    self.build_parameters = parameters
+    self.attribute_index = AttributeIndex(attributes)
+    self.index = faiss.IndexIVFFlat(index_file, ds_file)
     return
 
 @IVFIdFilter.register_init_query("structured", "conjunction")
@@ -96,9 +108,17 @@ def build_sparse(self, vectors, attributes, parameters):
 
     quantizer = faiss.IndexFlatL2(self.dim)
     self.index = faiss.IndexIVFFlat(quantizer, self.dim, self.build_parameters.nlist)
-    train_size = int(len(vectors) * 0.1)
+    train_size = int(len(vectors) * 0.5)
     self.index.train(vectors[:train_size])
     self.index.add(vectors)
+    return
+
+@IVFIdFilter.register_build_from_files("sparse")
+def build_from_files_sparse(self, ds_file, index_file, attributes, parameters):
+    self.base_attributes_csc = attributes.tocsc()
+    self.build_parameters = parameters
+
+    self.index = faiss.IndexIVFFlat(index_file, ds_file)
     return
 
 @IVFIdFilter.register_init_query("sparse", "conjunction")

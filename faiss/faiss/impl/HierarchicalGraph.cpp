@@ -534,4 +534,18 @@ void HierarchicalGraph::print() const {
     std::cout << "========================================\n";
 }
 
+std::vector<float> HierarchicalGraph::avg_num_neighbors() const {
+    std::vector<float> avg_edges_per_layer;
+    for (int i = 0; i < this->graph.size(); i++) {
+        int edge_count = 0;
+        for (int j = 0; j < this->graph[i].size(); j++) {
+            edge_count += this->graph[i][j].size();
+        }
+        float avg_edges =
+                static_cast<float>(edge_count / this->graph[i].size());
+        avg_edges_per_layer.push_back(avg_edges);
+    }
+    return avg_edges_per_layer;
+}
+
 } // namespace faiss

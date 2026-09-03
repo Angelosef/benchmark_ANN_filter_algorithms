@@ -13,6 +13,7 @@ class BaseANNIndex(ABC):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls.build_strategies = {}
+        cls.build_from_files_strategies = {}
         cls.query_strategies = {}
         cls.init_query_strategies = {}
 
@@ -20,6 +21,13 @@ class BaseANNIndex(ABC):
     def register_build(cls, attribute_type):
         def decorator(func):
             cls.build_strategies[attribute_type] = func
+            return func
+        return decorator
+
+    @classmethod
+    def register_build_from_files(cls, attribute_type):
+        def decorator(func):
+            cls.build_from_files_strategies[attribute_type] = func
             return func
         return decorator
     
@@ -44,6 +52,14 @@ class BaseANNIndex(ABC):
         
         fn = self.build_strategies[self.attribute_type]
         return fn(self, vectors, attributes, parameters)
+
+    def build_from_files(self, ds_file, index_file, attributes, parameters, config):
+        self.attribute_type = config.attribute_type
+        if self.attribute_type not in self.build_from_files_strategies:
+            raise ValueError(f"Unsupported attribute type: {self.attribute_type}")
+        
+        fn = self.build_from_files_strategies[self.attribute_type]
+        return fn(self, ds_file, index_file, attributes, parameters)
     
     def timed_single_query(self, vector, filter, k, single_query_fn):
         start_time = time.perf_counter()
@@ -100,4 +116,8 @@ class BaseANNIndex(ABC):
 
     @abstractmethod
     def name(self) -> str:
+        pass
+
+    @abstractmethod
+    def save_to_files(self, ds_file, index_file):
         pass

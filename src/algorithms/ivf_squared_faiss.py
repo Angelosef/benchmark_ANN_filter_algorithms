@@ -25,6 +25,11 @@ class IVFSquaredFaiss(BaseANNIndex):
     def name(self):
         return self.algo_name
 
+    def save_to_files(self, ds_file, index_file):
+        if ds_file is None:
+            ds_file = ""
+        self.index.writeToFile(index_file, ds_file)
+
 @IVFSquaredFaiss.register_build("sparse")
 def build_sparse_ivf_squared(self, vectors, attributes, parameters):    
     self.build_parameters = parameters
@@ -43,6 +48,13 @@ def build_sparse_ivf_squared(self, vectors, attributes, parameters):
     attributes_csc = attributes.tocsc()
 
     self.index.add_with_tags(vectors, attributes_csc.indices, attributes_csc.indptr)    
+    return
+
+@IVFSquaredFaiss.register_build_from_files("sparse")
+def build_from_files_sparse_ivf_squared(self, ds_file, index_file, attributes, parameters):    
+    self.build_parameters = parameters
+    
+    self.index = faiss.IndexIVFSquared(index_file, ds_file)
     return
 
 @IVFSquaredFaiss.register_init_query("sparse", "conjunction")

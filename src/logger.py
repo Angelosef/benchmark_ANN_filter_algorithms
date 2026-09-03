@@ -5,13 +5,14 @@ import numpy as np
 import pandas as pd
 from src.datasets.base_dataset import Dataset
 import src.datasets.all_datasets
-
+from src.benchmark.save_manager import SaveManager
 
 class BenchmarkLogger:
     def __init__(self, base_log_dir="logs"):
         self.base_log_dir = base_log_dir
         os.makedirs(self.base_log_dir, exist_ok=True)
         self.master_log_path = os.path.join(self.base_log_dir, "master_registry.csv")
+        self.save_manager = SaveManager()
     
     def get_log_dir(self):
         return self.base_log_dir
@@ -106,6 +107,96 @@ class BenchmarkLogger:
 
         with open(os.path.join(run_dir, "metadata.json"), "w") as f:
             json.dump(metadata, f, indent=4)
+        return
+
+    def copy_construction_metrics(self, run_dir):
+        metadata_path = os.path.join(run_dir, "metadata.json")
+        
+        with open(metadata_path, "r") as f:
+            metadata = json.load(f)
+            
+        built_from_file = metadata.get('built_from_file', False)
+        if not built_from_file:
+            return metadata  # Skip if this run wasn't loaded from a saved file
+
+        index_name = metadata['index_name']
+        ds_name = metadata['dataset_name']
+        subset_size = metadata['subset_size']
+        build_params = metadata['build_params']
+
+        # Convert target build_params to a dict for safe dictionary comparison
+        target_params = build_params.__dict__ if hasattr(build_params, '__dict__') else build_params
+
+        matched_metadata = None
+
+        # Recursively search self.base_log_dir for a original build run
+        for root, _, files in os.walk(self.base_log_dir):
+            if "metadata.json" in files:
+                current_meta_path = os.path.join(root, "metadata.json")
+                
+                # Skip checking the current run_dir metadata itself
+                if os.path.abspath(current_meta_path) == os.path.abspath(metadata_path):
+                    continue
+
+                try:
+                    with open(current_meta_path, "r") as f:
+                        meta = json.load(f)
+
+                    # Extract build parameters from candidate file
+                    candidate_params = meta.get('build_params')
+                    if hasattr(candidate_params, '__dict__'):
+                        candidate_params = candidate_params.__dict__
+
+                    # Check for exact parameter match and built_from_file == False
+                    if (
+                        meta.get('index_name') == index_name and
+                        meta.get('dataset_name') == ds_name and
+                        meta.get('subset_size') == subset_size and
+                        candidate_params == target_params and
+                        meta.get('built_from_file') is False
+                    ):
+                        matched_metadata = meta
+                        break  # Stop searching once match is found
+                except (json.JSONDecodeError, OSError):
+                    continue  # Skip unreadable or corrupted JSON files
+
+        if matched_metadata:
+            # Copy specified metrics over to current run's metadata
+            metrics_to_copy = ["build_time", "index_memory", "build_memory_peak"]
+            for metric in metrics_to_copy:
+                if metric in matched_metadata:
+                    metadata[metric] = matched_metadata[metric]
+
+            # Write the updated metadata back to run_dir/metadata.json
+            with open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=4)
+
+        return metadata
+
+    def log_file_memory(self, run_dir):
+        with open(os.path.join(run_dir, "metadata.json"), "r") as f:
+            metadata = json.load(f)
+        index_name = metadata['index_name']
+        ds_name = metadata['dataset_name']
+        subset_size = metadata['subset_size']
+        build_params = metadata['build_params']
+
+        ds_file, index_file = self.save_manager.find_saved_files(
+            index_name,
+            build_params,
+            ds_name,
+            subset_size
+        )
+
+        ds_file_size = os.path.getsize(ds_file) if ds_file else None
+        index_file_size = os.path.getsize(index_file) if index_file else None
+
+        metadata['ds_file_size'] = ds_file_size
+        metadata['index_file_size'] = index_file_size
+
+        with open(os.path.join(run_dir, "metadata.json"), "w") as f:
+            json.dump(metadata, f, indent=4)
+            
         return
 
 def calculate_avg_recall(I, gt_ids, k):
