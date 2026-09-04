@@ -9,8 +9,8 @@ import multiprocessing
 def bench_sift(nr):
     ds = siftDataset(subset_size=1.0, neighbors_retrieved=10)
 
-    initial_k = generateLogGrid(50, 1000, 3)
-    efSearch = generateLogGrid(10, 200, 3)
+    initial_k = generateLogGrid(50, 5000, 5)
+    efSearch = generateLogGrid(10, 1000, 5)
 
     build_params = [HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)]
     query_params = [
@@ -24,8 +24,8 @@ def bench_sift(nr):
 def bench_glove():
     ds = GloVeDataset(subset_size=1.0, neighbors_retrieved=10)
 
-    initial_k = generateLogGrid(50, 1000, 3)
-    efSearch = generateLogGrid(10, 200, 3)
+    initial_k = generateLogGrid(50, 5000, 5)
+    efSearch = generateLogGrid(10, 1000, 5)
 
     build_params = [HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)]
     query_params = [
@@ -39,8 +39,8 @@ def bench_glove():
 def bench_yfcc():
     ds = yfccDataset(subset_size=0.1, neighbors_retrieved=10)
 
-    initial_k = generateLogGrid(50, 1000, 3)
-    efSearch = generateLogGrid(10, 200, 3)
+    initial_k = generateLogGrid(50, 5000, 5)
+    efSearch = generateLogGrid(10, 1000, 5)
 
     build_params = [HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)]
     query_params = [
@@ -54,8 +54,8 @@ def bench_yfcc():
 def bench_gist():
     ds = gistDataset(subset_size=1.0, neighbors_retrieved=10)
 
-    initial_k = generateLogGrid(50, 1000, 3)
-    efSearch = generateLogGrid(10, 200, 3)
+    initial_k = generateLogGrid(50, 5000, 5)
+    efSearch = generateLogGrid(10, 1000, 5)
 
     build_params = [HNSWPostfilterBuildParameters(graph_degree=32, efConstruction=200)]
     query_params = [

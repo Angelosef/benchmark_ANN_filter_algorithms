@@ -126,7 +126,6 @@ typedef uint64_t size_t;
 #include <faiss/IndexReplicas.h>
 #include <faiss/impl/hnsw/MinimaxHeap.h>
 #include <faiss/impl/HNSW.h>
-#include <faiss/impl/HierarchicalGraph.h>
 
 #include <faiss/IndexHNSW.h>
 
@@ -595,7 +594,6 @@ void gpu_sync_all_devices()
 %include  <faiss/IndexAdditiveQuantizer.h>
 %include  <faiss/impl/io.h>
 
-%include  <faiss/impl/HierarchicalGraph.h>
 
 %include  <faiss/invlists/InvertedLists.h>
 %include  <faiss/invlists/InvertedListsIOHook.h>

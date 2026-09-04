@@ -26,7 +26,6 @@ IndexIVFSquared::IndexIVFSquared(
         int dimensions,
         int cut_off,
         int cluster_size,
-        int cut_off_tiny,
         int cut_off_bitvector,
         int efConstruction,
         int M,
@@ -35,7 +34,6 @@ IndexIVFSquared::IndexIVFSquared(
           storage(dimensions, metric),
           cut_off(cut_off),
           cluster_size(cluster_size),
-          cut_off_tiny(cut_off_tiny),
           cut_off_bitvector(cut_off_bitvector),
           efConstruction(efConstruction),
           M(M) {}
@@ -58,7 +56,6 @@ void IndexIVFSquared::writeToFile(
         // 2. IndexIVFSquared Hyperparameters
         WRITE1(this->cut_off);
         WRITE1(this->cluster_size);
-        WRITE1(this->cut_off_tiny);
         WRITE1(this->cut_off_bitvector);
         WRITE1(this->efConstruction);
         WRITE1(this->M);
@@ -120,7 +117,6 @@ void IndexIVFSquared::writeToFile(
 IndexIVFSquared::IndexIVFSquared(
         const std::string& index_file,
         const std::string& dataset_file) {
-    std::cout << "reading from file: " << index_file << std::endl;
     // Step A: Read raw vector dataset first into storage
     if (!dataset_file.empty()) {
         faiss::FileIOReader dataset_reader(dataset_file.c_str());
@@ -151,7 +147,6 @@ IndexIVFSquared::IndexIVFSquared(
         // 2. IndexIVFSquared Hyperparameters
         READ1(this->cut_off);
         READ1(this->cluster_size);
-        READ1(this->cut_off_tiny);
         READ1(this->cut_off_bitvector);
         READ1(this->efConstruction);
         READ1(this->M);
@@ -433,7 +428,7 @@ void IndexIVFSquared::search_single_tag(
 }
 
 // ============================================================================
-// Helper 4: Dual-Tag Handler
+// Helper 4: Dual-Tag Handler (Simplified with check_membership)
 // ============================================================================
 void IndexIVFSquared::search_dual_tag(
         const float* q,
@@ -442,6 +437,7 @@ void IndexIVFSquared::search_dual_tag(
         idx_t k,
         size_t n_target,
         const SearchParametersHNSW& hnsw_params,
+        int cut_off_tiny,
         float* simi,
         idx_t* idxi) const {
     // Bounds check tags
@@ -456,20 +452,26 @@ void IndexIVFSquared::search_dual_tag(
     size_t size1 = this->label_indexes[tag1]->size();
     size_t size2 = this->label_indexes[tag2]->size();
 
-    // Subcase 2a: Tiny Label Intersection
-    if (size1 < static_cast<size_t>(this->cut_off_tiny) ||
-        size2 < static_cast<size_t>(this->cut_off_tiny)) {
+    // ------------------------------------------------------------------------
+    // 1. Bitvector Join: Case where one label is especially small (< Ctiny)
+    // ------------------------------------------------------------------------
+    if (size1 < static_cast<size_t>(cut_off_tiny) ||
+        size2 < static_cast<size_t>(cut_off_tiny)) {
         idx_t tiny_tag = (size1 <= size2) ? tag1 : tag2;
-        idx_t other_tag = (size1 <= size2) ? tag2 : tag1;
+        idx_t large_tag = (size1 <= size2) ? tag2 : tag1;
 
+        // Small Label Join Candidates: Get ALL points for small label (n_target
+        // = 0)
         std::vector<idx_t> tiny_cands =
                 this->label_indexes[tiny_tag]->get_candidates(q, 0);
 
         std::vector<idx_t> common_ids;
         common_ids.reserve(tiny_cands.size());
 
+        // Delegate O(1) bitvector lookups (or binary search fallback) to
+        // check_membership
         for (idx_t id : tiny_cands) {
-            if (check_membership(other_tag, id, q)) {
+            if (check_membership(large_tag, id, q)) {
                 common_ids.push_back(id);
             }
         }
@@ -478,54 +480,30 @@ void IndexIVFSquared::search_dual_tag(
         return;
     }
 
-    // Subcase 2b: Dedicated Joint Pair Index
+    // ------------------------------------------------------------------------
+    // 2. Dedicated Joint Pair Index
+    // ------------------------------------------------------------------------
     auto pair_it = this->two_label_indexes.find({tag1, tag2});
     if (pair_it != this->two_label_indexes.end()) {
         pair_it->second->search(1, q, k, simi, idxi, &hnsw_params);
         return;
     }
 
-    // Subcase 2c: Dynamic Candidate Intersection & Bitvector Masking
+    // ------------------------------------------------------------------------
+    // 3. Large Label Candidate Intersection (General AND Filter Case)
+    // ------------------------------------------------------------------------
+    std::vector<idx_t> cands1 =
+            this->label_indexes[tag1]->get_candidates(q, n_target);
+    std::vector<idx_t> cands2 =
+            this->label_indexes[tag2]->get_candidates(q, n_target);
+
     std::vector<idx_t> common_ids;
-
-    if (tag2 < static_cast<idx_t>(this->membership_bitvector.size()) &&
-        !this->membership_bitvector[tag2].empty()) {
-        std::vector<idx_t> cands1 =
-                this->label_indexes[tag1]->get_candidates(q, n_target);
-
-        for (idx_t id : cands1) {
-            if (id < static_cast<idx_t>(
-                             this->membership_bitvector[tag2].size()) &&
-                this->membership_bitvector[tag2][id]) {
-                common_ids.push_back(id);
-            }
-        }
-    } else if (
-            tag1 < static_cast<idx_t>(this->membership_bitvector.size()) &&
-            !this->membership_bitvector[tag1].empty()) {
-        std::vector<idx_t> cands2 =
-                this->label_indexes[tag2]->get_candidates(q, n_target);
-
-        for (idx_t id : cands2) {
-            if (id < static_cast<idx_t>(
-                             this->membership_bitvector[tag1].size()) &&
-                this->membership_bitvector[tag1][id]) {
-                common_ids.push_back(id);
-            }
-        }
-    } else {
-        std::vector<idx_t> cands1 =
-                this->label_indexes[tag1]->get_candidates(q, n_target);
-        std::vector<idx_t> cands2 =
-                this->label_indexes[tag2]->get_candidates(q, n_target);
-
-        std::set_intersection(
-                cands1.begin(),
-                cands1.end(),
-                cands2.begin(),
-                cands2.end(),
-                std::back_inserter(common_ids));
-    }
+    std::set_intersection(
+            cands1.begin(),
+            cands1.end(),
+            cands2.begin(),
+            cands2.end(),
+            std::back_inserter(common_ids));
 
     rerank_candidates(q, common_ids, k, simi, idxi);
 }
@@ -547,6 +525,7 @@ void IndexIVFSquared::search(
 
     size_t n_target = ivf_params ? ivf_params->n_target : 1000;
     int efSearch = ivf_params ? ivf_params->efSearch : 64;
+    int cut_off_tiny = ivf_params ? ivf_params->cut_off_tiny : 200;
 
     SearchParametersHNSW hnsw_params;
     hnsw_params.efSearch = efSearch;
@@ -585,7 +564,15 @@ void IndexIVFSquared::search(
         else {
             // std::cout << "dual tag search\n";
             search_dual_tag(
-                    q, tag1, tag2, k, n_target, hnsw_params, simi, idxi);
+                    q,
+                    tag1,
+                    tag2,
+                    k,
+                    n_target,
+                    hnsw_params,
+                    cut_off_tiny,
+                    simi,
+                    idxi);
         }
     }
     // std::cout << "finished processing query\n\n";

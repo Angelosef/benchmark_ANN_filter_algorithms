@@ -21,6 +21,7 @@ constexpr idx_t NO_TAG = -1;
 
 struct SearchParametersIVFSquared : public SearchParameters {
     const idx_t* query_tags = nullptr;
+    int cut_off_tiny = 20;
     size_t n_target = 1000;
     int efSearch = 32;
 
@@ -66,7 +67,6 @@ struct IndexIVFSquared : Index {
 
     int cut_off;
     int cluster_size;
-    int cut_off_tiny;
     int cut_off_bitvector;
     int efConstruction;
     int M;
@@ -75,7 +75,6 @@ struct IndexIVFSquared : Index {
             int dimensions,
             int cut_off,
             int cluster_size,
-            int cut_off_tiny,
             int cut_off_bitvector,
             int efConstruction = 128,
             int M = 16,
@@ -142,6 +141,7 @@ struct IndexIVFSquared : Index {
             idx_t k,
             size_t n_target,
             const SearchParametersHNSW& hnsw_params,
+            int cut_off_tiny,
             float* simi,
             idx_t* idxi) const;
 #endif

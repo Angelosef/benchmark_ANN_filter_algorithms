@@ -8,8 +8,8 @@ from src.logger import BenchmarkLogger
 
 if __name__=="__main__":
     test_sift = False
-    test_glove = True
-    test_yfcc = False
+    test_glove = False
+    test_yfcc = True
     test_gist = False
 
     if test_sift:
@@ -42,7 +42,7 @@ if __name__=="__main__":
         dataset = GloVeDataset(subset_size, k)
         print("running HNSW on glove dataset")
         build_params = HNSWPostfilterBuildParameters(graph_degree=16, efConstruction=100)
-        query_params = HNSWPostfilterQueryParameters(efSearch=100, initial_k=200)
+        query_params = HNSWPostfilterQueryParameters(efSearch=200, initial_k=200)
 
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, HNSWPostfilter, build_params, query_params)

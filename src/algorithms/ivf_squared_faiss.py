@@ -3,17 +3,17 @@ import faiss
 import numpy as np
 
 class IVFSquaredFaissBuildParameters:
-    def __init__(self, cut_off=1000, cluster_size=16, cut_off_tiny=100, cut_off_bitvector=10000, efConstruction=128, M=16):
+    def __init__(self, cut_off=1000, cluster_size=16, cut_off_bitvector=10000, efConstruction=128, M=16):
         self.cut_off = cut_off
         self.cluster_size = cluster_size
-        self.cut_off_tiny = cut_off_tiny
         self.cut_off_bitvector = cut_off_bitvector
         self.efConstruction = efConstruction
         self.M = M
         
         
 class IVFSquaredFaissQueryParameters:
-    def __init__(self, efSearch=16, target_points=1000):
+    def __init__(self, cut_off_tiny=100, efSearch=16, target_points=1000):
+        self.cut_off_tiny = cut_off_tiny
         self.efSearch = efSearch
         self.target_points = target_points
         
@@ -38,8 +38,7 @@ def build_sparse_ivf_squared(self, vectors, attributes, parameters):
     self.index = faiss.IndexIVFSquared(
         vectors.shape[1], 
         cut_off=parameters.cut_off, 
-        cluster_size=parameters.cluster_size, 
-        cut_off_tiny=parameters.cut_off_tiny, 
+        cluster_size=parameters.cluster_size,
         cut_off_bitvector=parameters.cut_off_bitvector,
         efConstruction=parameters.efConstruction,
         M=parameters.M
@@ -70,8 +69,9 @@ def query_sparse_ivf_squared(self, vector, filter, k):
     for i, tag in enumerate(required_tags):
         query_tags[i] = tag
     search_params = faiss.SearchParametersIVFSquared()
+    search_params.cut_off_tiny = self.query_params.cut_off_tiny
     search_params.efSearch = self.query_params.efSearch
-    search_params.target_points = self.query_params.target_points
+    search_params.n_target = self.query_params.target_points
     search_params.set_query_tags(query_tags)
 
     distances, labels = self.index.search(vector.reshape(1, -1), k=k, params=search_params)

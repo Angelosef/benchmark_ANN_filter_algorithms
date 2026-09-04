@@ -9,8 +9,8 @@ import multiprocessing
 
 def bench_sift(nr):
     ds = siftDataset(subset_size=1.0, neighbors_retrieved=10)
-    nlist = generateLogGrid(200, 300, 2)
-    nprobe = generateLogGrid(5, 100, 4)
+    nlist = generateLogGrid(400, 5000, 4)
+    nprobe = generateLogGrid(2, 400, 8)
 
     build_params = [
         IVFIdFilterBuildParameters(nlist=nl)
@@ -25,9 +25,9 @@ def bench_sift(nr):
 
 def bench_glove():
     ds = GloVeDataset(subset_size=1.0, neighbors_retrieved=10)
-        
-    nlist = generateLogGrid(200, 300, 2)
-    nprobe = generateLogGrid(5, 100, 4)
+    
+    nlist = generateLogGrid(400, 5000, 4)
+    nprobe = generateLogGrid(2, 400, 8)
 
     build_params = [
         IVFIdFilterBuildParameters(nlist=nl)
@@ -42,8 +42,8 @@ def bench_glove():
 def bench_yfcc():
     ds = yfccDataset(subset_size=0.1, neighbors_retrieved=10)
         
-    nlist = generateLogGrid(200, 300, 2)
-    nprobe = generateLogGrid(5, 100, 4)
+    nlist = generateLogGrid(400, 5000, 4)
+    nprobe = generateLogGrid(2, 400, 8)
 
     build_params = [
         IVFIdFilterBuildParameters(nlist=nl)
@@ -59,8 +59,8 @@ def bench_yfcc():
 def bench_gist():
     ds = gistDataset(subset_size=1.0, neighbors_retrieved=10)
         
-    nlist = generateLogGrid(200, 300, 2)
-    nprobe = generateLogGrid(5, 100, 4)
+    nlist = generateLogGrid(400, 5000, 4)
+    nprobe = generateLogGrid(2, 400, 8)
 
     build_params = [
         IVFIdFilterBuildParameters(nlist=nl)

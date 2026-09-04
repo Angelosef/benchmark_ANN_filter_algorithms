@@ -19,7 +19,7 @@ if __name__=="__main__":
         for num_restrictions in range(1, 4):
             print("num_restr = ", num_restrictions)
             
-            build_params = AcornBuildParameters(M=16, gamma=12, M_beta=32, efConstruction=16)
+            build_params = AcornBuildParameters(M=32, gamma=36, M_beta=32*4, efConstruction=256)
             query_params = AcornQueryParameters(efSearch=32)
     
             print("initializing benchmark")
@@ -34,13 +34,13 @@ if __name__=="__main__":
             print("recall = ", recall)
 
     if test_glove:
-        subset_size = 1.0
+        subset_size = 0.1
         k = 10
 
         dataset = GloVeDataset(subset_size, k)
         print("running Acorn on glove dataset")
-        build_params = AcornBuildParameters(M=16, gamma=32, M_beta=32, efConstruction=200)
-        query_params = AcornQueryParameters(efSearch=32)
+        build_params = AcornBuildParameters(M=32, gamma=28, M_beta=200, efConstruction=300)
+        query_params = AcornQueryParameters(efSearch=64)
 
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, Acorn, build_params, query_params)
@@ -60,7 +60,7 @@ if __name__=="__main__":
         dataset = yfccDataset(subset_size, k)
         dataset.prepare()
         print("running Acorn on yfcc dataset")
-        build_params = AcornBuildParameters(M=3, gamma=12, M_beta=32, efConstruction=8)
+        build_params = AcornBuildParameters(M=32, gamma=12, M_beta=32, efConstruction=128)
         query_params = AcornQueryParameters(efSearch=46)
 
         print("initializing benchmark")

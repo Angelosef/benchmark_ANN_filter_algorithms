@@ -13,13 +13,13 @@ if __name__=="__main__":
             
         print("running ivf-squared on yfcc dataset")
         
-        subset_size = 0.1
+        subset_size = 0.01
         k = 10
     
         dataset = yfccDataset(subset_size, k)
         print("initializing benchmark")
-        build_params = IVFSquaredFaissBuildParameters(cut_off=10000, cluster_size=1000, cut_off_tiny=300, cut_off_bitvector=40000, efConstruction=128, M=16)
-        query_params = IVFSquaredFaissQueryParameters(efSearch=16, target_points=5000)
+        build_params = IVFSquaredFaissBuildParameters(cut_off=5000, cluster_size=1000, cut_off_bitvector=30000, efConstruction=128, M=32)
+        query_params = IVFSquaredFaissQueryParameters(cut_off_tiny=100, efSearch=32, target_points=2000)
         runner = BenchmarkRunner(dataset, None, IVFSquaredFaiss, build_params, query_params)
         print("running benchmark")
         D, I, L, metadata = runner.run()

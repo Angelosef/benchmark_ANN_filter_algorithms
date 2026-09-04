@@ -823,17 +823,15 @@ def _IndexIVFSquared_init(self, *args, **kwargs):
     def_d = args[0] if len(args) > 0 else kwargs.get('d')
     def_cut_off = args[1] if len(args) > 1 else kwargs.get('cut_off', 100)
     def_cluster_size = args[2] if len(args) > 2 else kwargs.get('cluster_size', 32)
-    def_cut_off_tiny = args[3] if len(args) > 3 else kwargs.get('cut_off_tiny', 20)
-    def_cut_off_bitvector = args[4] if len(args) > 4 else kwargs.get('cut_off_bitvector', 1000)
-    def_efConstruction = args[5] if len(args) > 5 else kwargs.get('efConstruction', 128)
-    def_M = args[6] if len(args) > 6 else kwargs.get('M', 16)
+    def_cut_off_bitvector = args[3] if len(args) > 3 else kwargs.get('cut_off_bitvector', 1000)
+    def_efConstruction = args[4] if len(args) > 4 else kwargs.get('efConstruction', 128)
+    def_M = args[5] if len(args) > 5 else kwargs.get('M', 32)
 
     _orig_IndexIVFSquared_init(
         self,
         def_d,
         def_cut_off,
         def_cluster_size,
-        def_cut_off_tiny,
         def_cut_off_bitvector,
         def_efConstruction,
         def_M,

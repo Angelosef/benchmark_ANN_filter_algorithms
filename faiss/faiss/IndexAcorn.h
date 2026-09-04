@@ -69,6 +69,7 @@ struct IndexAcorn : Index {
             idx_t* labels,
             const SearchParameters* params = nullptr) const;
 
+   private:
     std::vector<idx_t> searchLayer(
             int layer,
             idx_t entry_node,
@@ -80,6 +81,7 @@ struct IndexAcorn : Index {
             int layer,
             idx_t entry_node,
             const float* vec,
+            int ef,
             int results_size) const;
 };
 

@@ -8,17 +8,22 @@ import multiprocessing
 
 def bench_yfcc():
     ds = yfccDataset(subset_size=0.1, neighbors_retrieved=10)
-    
-    target_points = generateLogGrid(5000, 10000, 2)
-    efSearch = generateLogGrid(16, 64, 2)
-    cut_off = generateLogGrid(10000, 20000, 2)
 
+    cut_off = generateLogGrid(5_000, 20_000, 2)
+    cut_off_bitvector = generateLogGrid(30_000, 100_000, 2)
+
+    tiny_cutoff = generateLogGrid(1_000, 10_000, 2)
+    target_points = generateLogGrid(1_000, 50_000, 3)
+    efSearch = generateLogGrid(16, 64, 3)
+    
     build_params = [
-        IVFSquaredFaissBuildParameters(cut_off=co, cluster_size=1000, cut_off_tiny=300, cut_off_bitvector=40000, efConstruction=128, M=16)
+        IVFSquaredFaissBuildParameters(cut_off=co, cluster_size=1000, cut_off_bitvector=cob, efConstruction=128, M=32)
         for co in cut_off
+        for cob in cut_off_bitvector
     ]
     query_params = [
-        IVFSquaredFaissQueryParameters(efSearch=ef, target_points=tp)
+        IVFSquaredFaissQueryParameters(cut_off_tiny=tc, efSearch=ef, target_points=tp)
+        for tc in tiny_cutoff
         for ef in efSearch
         for tp in target_points
     ]
@@ -28,23 +33,28 @@ def bench_yfcc():
 def bench_gist():
     ds = gistDataset(subset_size=1.0, neighbors_retrieved=10)
     
-    target_points = generateLogGrid(5000, 10000, 2)
-    efSearch = generateLogGrid(16, 64, 2)
-    cut_off = generateLogGrid(30000, 30000, 1)
+    cut_off = generateLogGrid(5_000, 20_000, 2)
+    cut_off_bitvector = generateLogGrid(30_000, 100_000, 2)
 
+    tiny_cutoff = generateLogGrid(1_000, 10_000, 2)
+    target_points = generateLogGrid(1_000, 50_000, 3)
+    efSearch = generateLogGrid(16, 64, 3)
+    
     build_params = [
-        IVFSquaredFaissBuildParameters(cut_off=co, cluster_size=1000, cut_off_tiny=300, cut_off_bitvector=40000, efConstruction=128, M=16)
+        IVFSquaredFaissBuildParameters(cut_off=co, cluster_size=1000, cut_off_bitvector=cob, efConstruction=128, M=32)
         for co in cut_off
+        for cob in cut_off_bitvector
     ]
     query_params = [
-        IVFSquaredFaissQueryParameters(efSearch=ef, target_points=tp)
+        IVFSquaredFaissQueryParameters(cut_off_tiny=tc, efSearch=ef, target_points=tp)
+        for tc in tiny_cutoff
         for ef in efSearch
         for tp in target_points
     ]
     runFullBenchmark(ds, None, IVFSquaredFaiss, build_params, query_params)
 
 if __name__=="__main__":
-    test_yfcc = False
+    test_yfcc = True
     test_gist = True
     
     if test_yfcc:
