@@ -54,7 +54,7 @@ def bench_gist():
     runFullBenchmark(ds, None, IVFSquaredFaiss, build_params, query_params)
 
 if __name__=="__main__":
-    test_yfcc = True
+    test_yfcc = False
     test_gist = True
     
     if test_yfcc:

@@ -183,7 +183,7 @@ class CrossEvaluator:
 
         full_df = self._prepare_selectivity_df(ds_name, ds_subset_size, neighbors_retrieved, ds_query_param)
         for (min_sel, max_sel), group in full_df.groupby(["min_selectivity", "max_selectivity"]):    
-            filename = f'{min_sel:.4f}_{max_sel:.4f},csv'
+            filename = f'{min_sel:.4f}_{max_sel:.4f}.csv'
             save_path = os.path.join(save_folder, filename)
             self.save_speedup_table(group, baseline_index, target_recalls, save_path, index_col='index_name', recall_col='avg_recall', latency_col='avg_latency')
         
@@ -532,7 +532,7 @@ class CrossEvaluator:
         print(f"Done! Plots saved in: {self.plot_dir}")
         return
 
-def generate_cross_eval_plots(test_sift=False, test_glove=True, test_yfcc=True, test_gist=False):
+def generate_cross_eval_plots(test_sift=True, test_glove=True, test_yfcc=True, test_gist=True):
     evaluator = CrossEvaluator()
     
     if test_sift:
@@ -540,7 +540,7 @@ def generate_cross_eval_plots(test_sift=False, test_glove=True, test_yfcc=True, 
             evaluator.plot(dataset_name="SIFT", subset_size=1.0, ds_query_param=num_restrictions)
 
     if test_glove:
-        evaluator.plot(dataset_name="GLOVE", subset_size=0.1, ds_query_param=None)
+        evaluator.plot(dataset_name="GLOVE", subset_size=1.0, ds_query_param=None)
 
     if test_yfcc:
         evaluator.plot(dataset_name="YFCC", subset_size=0.1, ds_query_param=None)
@@ -574,4 +574,4 @@ def generate_cross_eval_tables(test_sift=True, test_glove=True, test_yfcc=True, 
 
 if __name__ == '__main__':
     generate_cross_eval_plots()
-    # generate_cross_eval_tables()
+    generate_cross_eval_tables()

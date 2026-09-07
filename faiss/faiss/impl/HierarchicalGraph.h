@@ -27,6 +27,17 @@ struct ComponentStats {
     size_t isolated_nodes; // Nodes with 0 edges
 };
 
+struct LayerSortingStats {
+    int layer;
+    size_t total_nodes;
+    size_t total_neighbors_evaluated;
+    size_t fully_sorted_nodes;
+    size_t total_inversions;
+    float avg_inversions_per_node;
+    float inverted_pairs_pct; // % of adjacent neighbor pairs out of order
+    float sorted_nodes_pct; // % of nodes whose adjacency lists are 100% sorted
+};
+
 struct HierarchicalGraph {
    private:
     std::vector<std::deque<omp_lock_t>> node_locks;
@@ -35,7 +46,6 @@ struct HierarchicalGraph {
     bool addDirectedEdge(int layer, idx_t node1, idx_t node2);
     int find_index(int layer, idx_t node, idx_t vector_id) const;
     bool removeDirectedEdge(int layer, idx_t node1, idx_t node2);
-    float calcDistance(int layer, idx_t node1, idx_t node2) const;
 
    public:
     Index* storage;
@@ -58,15 +68,17 @@ struct HierarchicalGraph {
             int layer,
             idx_t new_node,
             std::vector<idx_t> candidates);
-    void addInitialBottomEdges(idx_t new_node, std::vector<idx_t> candidates);
     void twoHopPruning(int layer, idx_t node);
+    void removeLast(int layer, idx_t node);
 
     const std::vector<idx_t>& getNeighbors(int layer, idx_t node) const;
-    const std::vector<idx_t> getNeighborsSafe(int layer, idx_t node) const;
+    const std::vector<idx_t> getNeighborsSafe(
+            int layer,
+            idx_t node,
+            int num_neighbors = -1) const;
     idx_t getIndex(int layer, idx_t node) const;
     idx_t getIndexSafe(int layer, idx_t node) const;
     idx_t getDownwardsNode(int layer, idx_t node) const;
-    idx_t getDownwardsNodeSafe(int layer, idx_t node) const;
 
     int getEntryPoint() const;
     int getMaxLayer() const;
@@ -91,6 +103,8 @@ struct HierarchicalGraph {
 
     // Prints component statistics per layer
     void printConnectedComponents() const;
+    std::vector<LayerSortingStats> getSortingStats() const;
+    void printSortingStats() const;
 };
 
 } // namespace faiss

@@ -25,6 +25,7 @@ struct IndexAcorn : Index {
     int gamma;
     int M;
     int Mbeta;
+    int two_hop_prune_cutoff;
     float ml;
 
     std::mt19937 rng;

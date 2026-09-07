@@ -52,7 +52,7 @@ class ParameterAnalyser:
             metadata_path = os.path.join(self.log_root, run_id, 'metadata.json')
             details = load_run_data(metadata_path)
             if details:
-                details['memory_gb'] = details['index_memory'] / (1024**3)
+                details['memory_gb'] = details['index_file_size'] / (1024**3)
                 
                 # Flatten nested parameter dicts into top-level columns
                 # Flatten nested parameter dicts into top-level columns with distinct prefixes
@@ -206,7 +206,7 @@ class ParameterAnalyser:
         plt.savefig(save_path, dpi=300)
         plt.close()
 
-    def plot_query_parameter(self, index_name, dataset_name, ds_subset_size, ds_query_param=None):
+    def plot_query_parameters(self, index_name, dataset_name, ds_subset_size, ds_query_param=None):
         """Plots (avg_recall, avg_latency) with multi-dimensional hyperparameter tree topology"""
         df = self.prepare_dataframe(index_name, dataset_name, ds_subset_size, ds_query_param)
 
@@ -351,7 +351,7 @@ class ParameterAnalyser:
         plt.savefig(save_path, dpi=300)
         plt.close()
 
-    def plot_query_parameter_DAG(self, index_name, dataset_name, ds_subset_size, ds_query_param=None):
+    def plot_query_parameters_DAG(self, index_name, dataset_name, ds_subset_size, ds_query_param=None):
         """Plots (avg_recall, avg_latency) with multi-dimensional hyperparameter DAG topology"""
         df = self.prepare_dataframe(index_name, dataset_name, ds_subset_size, ds_query_param)
 
@@ -492,26 +492,40 @@ class ParameterAnalyser:
         plt.savefig(save_path, dpi=300)
         plt.close()
 
+def plot_helper(param_analyser, index, dataset, subset_size=1.0, query_param=None):
+    param_analyser.plot_query_parameters(index, dataset, subset_size, query_param)
+    param_analyser.plot_build_parameters(index, dataset, subset_size, query_param)
+    
+
 if __name__=='__main__':
-    analyser = ParameterAnalyser()
-    analyser.plot_query_parameter('Acorn', 'GIST', 1.0, None)
-    analyser.plot_query_parameter_DAG('Acorn', 'GIST', 1.0, None)
-    analyser.plot_build_parameters('Acorn', 'GIST', 1.0, None)
+    acorn_analyser = ParameterAnalyser()
+    ivf_analyser = ParameterAnalyser()
+    ivf2_analyser = ParameterAnalyser()
+    hnsw_analyser = ParameterAnalyser()
+
+    for nr in range(1, 4):
+        plot_helper(acorn_analyser, 'Acorn', 'SIFT', 1.0, nr)
+    plot_helper(acorn_analyser, 'Acorn', 'GLOVE')
+    plot_helper(acorn_analyser, 'Acorn', 'YFCC', 0.1)
+    plot_helper(acorn_analyser, 'Acorn', 'GIST')
+
+    for nr in range(1, 4):
+        plot_helper(acorn_analyser, 'AcornFlat', 'SIFT', 1.0, nr)
+    plot_helper(acorn_analyser, 'AcornFlat', 'GLOVE')
+    plot_helper(acorn_analyser, 'AcornFlat', 'YFCC', 0.1)
+    plot_helper(acorn_analyser, 'AcornFlat', 'GIST')
+
+    for nr in range(1, 4):
+        plot_helper(hnsw_analyser, 'HNSWPostfilter', 'SIFT', 1.0, nr)
+    plot_helper(hnsw_analyser, 'HNSWPostfilter', 'GLOVE')
+    plot_helper(hnsw_analyser, 'HNSWPostfilter', 'YFCC', 0.1)
+    plot_helper(hnsw_analyser, 'HNSWPostfilter', 'GIST')
+
+    for nr in range(1, 4):
+        plot_helper(ivf_analyser, 'IVFIdFilter', 'SIFT', 1.0, nr)
+    plot_helper(ivf_analyser, 'IVFIdFilter', 'GLOVE')
+    plot_helper(ivf_analyser, 'IVFIdFilter', 'YFCC', 0.1)
+    plot_helper(ivf_analyser, 'IVFIdFilter', 'GIST')
     
-    analyser.plot_query_parameter('IVFSquaredFaiss', 'GIST', 1.0, None)
-    analyser.plot_query_parameter_DAG('IVFSquaredFaiss', 'GIST', 1.0, None)
-    analyser.plot_build_parameters('IVFSquaredFaiss', 'GIST', 1.0, None)
-
-    analyser.plot_query_parameter('IVFSquaredFaiss', 'YFCC', 0.1, None)
-    analyser.plot_query_parameter_DAG('IVFSquaredFaiss', 'YFCC', 0.1, None)
-    analyser.plot_build_parameters('IVFSquaredFaiss', 'YFCC', 0.1, None)
-
-    analyser.plot_query_parameter('HNSWPostfilter', 'GIST', 1.0, None)
-    analyser.plot_query_parameter_DAG('HNSWPostfilter', 'GIST', 1.0, None)
-    analyser.plot_build_parameters('HNSWPostfilter', 'GIST', 1.0, None)
-
-    analyser.plot_query_parameter('IVFIdFilter', 'GIST', 1.0, None)
-    analyser.plot_query_parameter_DAG('IVFIdFilter', 'GIST', 1.0, None)
-    analyser.plot_build_parameters('IVFIdFilter', 'GIST', 1.0, None)
-
-    
+    plot_helper(ivf2_analyser, 'IVFSquaredFaiss', 'YFCC', 0.1)
+    plot_helper(ivf2_analyser, 'IVFSquaredFaiss', 'GIST')

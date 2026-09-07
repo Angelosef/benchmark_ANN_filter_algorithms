@@ -1,7 +1,7 @@
 import os
 import matplotlib.pyplot as plt
 import numpy as np
-from src.analysers.utils import load_run_data, find_selectivity_path
+from src.analysers.utils import load_run_data, find_selectivity_path, get_run_dirs
 from src.logger import BenchmarkLogger
 import json
 
@@ -206,14 +206,7 @@ if __name__=='__main__':
     logger = BenchmarkLogger()
     plotter = SingleRunEvaluator()
     
-    target_dir = logger.get_log_dir()
-    run_dirs = [
-        os.path.join(target_dir, name) 
-        for name in os.listdir(target_dir) 
-            if os.path.isdir(os.path.join(target_dir, name))
-    ]
-
-    # run_dirs = ['logs/IVFSquaredFaiss_GIST_20260809-003122']
+    run_dirs = get_run_dirs('AcornFlat')
 
     for run_directory in run_dirs:
         

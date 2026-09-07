@@ -5,7 +5,7 @@ from src.logger import BenchmarkLogger
 
 
 if __name__=="__main__":
-    test_sift = False
+    test_sift = True
     test_glove = True
     test_yfcc = False
     test_gist = False
@@ -39,8 +39,8 @@ if __name__=="__main__":
 
         dataset = GloVeDataset(subset_size, k)
         print("running Acorn on glove dataset")
-        build_params = AcornBuildParameters(M=32, gamma=28, M_beta=200, efConstruction=300)
-        query_params = AcornQueryParameters(efSearch=64)
+        build_params = AcornBuildParameters(M=32, gamma=28, M_beta=64, efConstruction=256)
+        query_params = AcornQueryParameters(efSearch=16)
 
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, Acorn, build_params, query_params)
@@ -60,8 +60,8 @@ if __name__=="__main__":
         dataset = yfccDataset(subset_size, k)
         dataset.prepare()
         print("running Acorn on yfcc dataset")
-        build_params = AcornBuildParameters(M=32, gamma=12, M_beta=32, efConstruction=128)
-        query_params = AcornQueryParameters(efSearch=46)
+        build_params = AcornBuildParameters(M=32, gamma=12, M_beta=128, efConstruction=256)
+        query_params = AcornQueryParameters(efSearch=32)
 
         print("initializing benchmark")
         runner = BenchmarkRunner(dataset, None, Acorn, build_params, query_params)

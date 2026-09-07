@@ -17,7 +17,7 @@ class AcornQueryParameters:
 class Acorn(BaseANNIndex):
     def __init__(self, dim, metric):
         super().__init__(dim, metric)
-        self.algo_name = "Acorn"
+        self.algo_name = "AcornFlat"
     
     def name(self):
         return self.algo_name

@@ -8,7 +8,7 @@ def bench_sift(nr):
     ds = siftDataset(subset_size=1.0, neighbors_retrieved=10)
 
     gamma = generateLogGrid(12, 36, 3)
-    M_beta = generateLogGrid(64, 256, 2)
+    M_beta = generateLogGrid(64, 128, 2)
     efSearch = generateLogGrid(12, 128, 4)
     
     build_params = [
@@ -27,7 +27,7 @@ def bench_glove():
     ds = GloVeDataset(subset_size=1.0, neighbors_retrieved=10)
     
     gamma = generateLogGrid(12, 36, 3)
-    M_beta = generateLogGrid(64, 256, 2)
+    M_beta = generateLogGrid(64, 128, 2)
     efSearch = generateLogGrid(12, 128, 4)
     
     build_params = [
@@ -45,7 +45,7 @@ def bench_yfcc():
     ds = yfccDataset(subset_size=0.1, neighbors_retrieved=10)
         
     gamma = generateLogGrid(12, 36, 3)
-    M_beta = generateLogGrid(64, 256, 2)
+    M_beta = generateLogGrid(64, 128, 2)
     efSearch = generateLogGrid(12, 128, 4)
     
     build_params = [
@@ -63,7 +63,7 @@ def bench_gist():
     ds = gistDataset(subset_size=1.0, neighbors_retrieved=10)
         
     gamma = generateLogGrid(12, 36, 3)
-    M_beta = generateLogGrid(64, 256, 2)
+    M_beta = generateLogGrid(64, 128, 2)
     efSearch = generateLogGrid(12, 128, 4)
     
     build_params = [

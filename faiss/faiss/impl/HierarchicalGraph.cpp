@@ -175,30 +175,6 @@ idx_t HierarchicalGraph::addNode(int node_layer, idx_t index) {
     return node_id;
 }
 
-float HierarchicalGraph::calcDistance(int layer, idx_t node1, idx_t node2)
-        const {
-    size_t d = this->storage->d;
-    std::vector<float> v1(d);
-    std::vector<float> v2(d);
-    idx_t p1 = this->getIndex(layer, node1);
-    idx_t p2 = this->getIndex(layer, node2);
-
-    storage->reconstruct(p1, v1.data());
-    storage->reconstruct(p2, v2.data());
-
-    // 2. Compute distance based on the metric type of the storage
-    if (storage->metric_type == faiss::METRIC_L2) {
-        return faiss::fvec_L2sqr(
-                v1.data(), v2.data(), d); // Squared L2 distance
-        // Use std::sqrt(faiss::fvec_L2sqr(...)) if you need un-squared
-        // Euclidean distance
-    } else if (storage->metric_type == faiss::METRIC_INNER_PRODUCT) {
-        return faiss::fvec_inner_product(v1.data(), v2.data(), d);
-    } else {
-        throw std::runtime_error("Unsupported metric type");
-    }
-}
-
 int HierarchicalGraph::find_index(int layer, idx_t node, idx_t vector_id)
         const {
     size_t d = this->storage->d;
@@ -215,7 +191,6 @@ int HierarchicalGraph::find_index(int layer, idx_t node, idx_t vector_id)
     float query_dist = (*dis)(vector_id);
 
     // Lambda replacing the nested function
-    // potentially dangerous operation without locking?
     auto get_cost = [&](idx_t neighbor) {
         return (*dis)(this->getIndex(layer, neighbor));
     };
@@ -248,38 +223,39 @@ bool HierarchicalGraph::addDirectedEdge(int layer, idx_t node1, idx_t node2) {
 
     bool added_edge;
     std::vector<idx_t> node1_neighbors = this->getNeighbors(layer, node1);
-    if (node1_neighbors.size() < this->max_neighbors) {
-        // insert to sorted list
-        added_edge = true;
-        idx_t vector_id = this->getIndex(layer, node2);
-        int insertion_index = this->find_index(layer, node1, vector_id);
-        auto& neighbors = this->graph[layer][node1];
-        neighbors.insert(neighbors.begin() + insertion_index, node2);
-    } else {
-        idx_t furthest_node = node1_neighbors.back();
-        float furthest_dist = this->calcDistance(layer, node1, furthest_node);
-        float node2_dist = this->calcDistance(layer, node1, node2);
-
-        if (furthest_dist < node2_dist ||
-            this->getNeighbors(layer, furthest_node).size() < this->Mbeta) {
-            added_edge = false;
-        } else {
-            // insert node2 and remove last
-            added_edge = true;
-            idx_t vector_id = this->getIndex(layer, node2);
-            int insertion_index = this->find_index(layer, node1, vector_id);
-            auto& neighbors = this->graph[layer][node1];
-            neighbors.insert(neighbors.begin() + insertion_index, node2);
-            idx_t last_neighbor = neighbors.back();
-            neighbors.pop_back();
-            this->removeDirectedEdge(layer, last_neighbor, node1);
-        }
-    }
+    // insert to sorted list
+    added_edge = true;
+    idx_t vector_id = this->getIndex(layer, node2);
+    int insertion_index = this->find_index(layer, node1, vector_id);
+    auto& neighbors = this->graph[layer][node1];
+    neighbors.insert(neighbors.begin() + insertion_index, node2);
 
     omp_unset_lock(lock_first);
     omp_unset_lock(lock_second);
 
     return added_edge;
+}
+
+void HierarchicalGraph::removeLast(int layer, idx_t node) {
+    omp_lock_t* node_lock = &(this->node_locks[layer][node]);
+    omp_set_lock(node_lock);
+    idx_t node_to_rmv = this->graph[layer][node].back();
+    omp_unset_lock(node_lock);
+
+    idx_t first = std::min(node, node_to_rmv);
+    idx_t second = std::max(node, node_to_rmv);
+
+    omp_lock_t* lock_first = &(this->node_locks[layer][first]);
+    omp_lock_t* lock_second = &(this->node_locks[layer][second]);
+
+    omp_set_lock(lock_first);
+    omp_set_lock(lock_second);
+
+    this->graph[layer][node].pop_back();
+    this->removeDirectedEdge(layer, node_to_rmv, node);
+
+    omp_unset_lock(lock_first);
+    omp_unset_lock(lock_second);
 }
 
 bool HierarchicalGraph::removeDirectedEdge(
@@ -372,66 +348,26 @@ void HierarchicalGraph::twoHopPruning(int layer, idx_t node) {
     }
 }
 
-void HierarchicalGraph::addInitialBottomEdges(
-        idx_t new_node,
-        std::vector<idx_t> candidates) {
-    int layer = 0;
-    std::vector<idx_t> neighbors;
-    int added_count = 0;
-    int checked_idx = 0;
-
-    for (int i = 0; added_count < this->Mbeta && i < candidates.size(); i++) {
-        bool added = this->addDirectedEdge(layer, candidates[i], new_node);
-        if (added) {
-            neighbors.push_back(candidates[i]);
-            added_count++;
-        }
-        checked_idx++;
-    }
-
-    std::unordered_set<idx_t> dynamic_neighbors;
-
-    int i = checked_idx;
-    while ((added_count + dynamic_neighbors.size()) < this->max_neighbors &&
-           i < candidates.size()) {
-        idx_t candidate_node = candidates[i];
-        if (dynamic_neighbors.count(candidate_node) > 0) {
-            i++;
-            continue;
-        }
-
-        bool added = this->addDirectedEdge(layer, candidate_node, new_node);
-        if (added) {
-            added_count++;
-            neighbors.push_back(candidate_node);
-            const std::vector<idx_t> two_hop_neighbors =
-                    this->getNeighborsSafe(layer, candidate_node);
-            for (idx_t node : two_hop_neighbors) {
-                dynamic_neighbors.insert(node);
-            }
-        }
-        i++;
-    }
-
-    idx_t index = this->getIndexSafe(layer, new_node);
-
-    omp_lock_t* lock_node = &(this->node_locks[layer][new_node]);
-    omp_set_lock(lock_node);
-    this->graph[layer][new_node] = std::move(neighbors);
-    omp_unset_lock(lock_node);
-}
-
 const std::vector<idx_t> HierarchicalGraph::getNeighborsSafe(
         int layer,
-        idx_t node) const {
+        idx_t node,
+        int num_neighbors) const {
     omp_lock_t* lock =
             const_cast<omp_lock_t*>(&(this->node_locks[layer][node]));
 
     omp_set_lock(lock);
-    std::vector<idx_t> copy = this->graph[layer][node];
+    int all_size = static_cast<int>(this->graph[layer][node].size());
+    if (num_neighbors == -1) {
+        num_neighbors = all_size;
+    }
+    int size = std::min(num_neighbors, all_size);
+    std::vector<idx_t> neighbors(size);
+    for (int i = 0; i < size; i++) {
+        neighbors[i] = this->graph[layer][node][i];
+    }
     omp_unset_lock(lock);
 
-    return copy;
+    return neighbors;
 }
 
 const std::vector<idx_t>& HierarchicalGraph::getNeighbors(int layer, idx_t node)
@@ -452,15 +388,6 @@ idx_t HierarchicalGraph::getIndexSafe(int layer, idx_t node) const {
 
 idx_t HierarchicalGraph::getIndex(int layer, idx_t node) const {
     return this->indexes[layer][node];
-}
-
-idx_t HierarchicalGraph::getDownwardsNodeSafe(int layer, idx_t node) const {
-    omp_set_lock(const_cast<omp_lock_t*>(&(this->expansion_lock)));
-
-    idx_t down_node = this->getDownwardsNode(layer, node);
-    omp_unset_lock(const_cast<omp_lock_t*>(&(this->expansion_lock)));
-
-    return down_node;
 }
 
 idx_t HierarchicalGraph::getDownwardsNode(int layer, idx_t node) const {
@@ -838,6 +765,113 @@ void HierarchicalGraph::printConnectedComponents() const {
     }
     std::cout
             << "==================================================================\n\n";
+}
+
+std::vector<LayerSortingStats> HierarchicalGraph::getSortingStats() const {
+    std::vector<LayerSortingStats> stats;
+    stats.reserve(graph.size());
+
+    std::unique_ptr<faiss::DistanceComputer> dis(
+            this->storage->get_distance_computer());
+
+    std::vector<float> query_vec(this->storage->d);
+
+    for (int l = 0; l < static_cast<int>(graph.size()); ++l) {
+        LayerSortingStats l_stats{};
+        l_stats.layer = l;
+        l_stats.total_nodes = graph[l].size();
+
+        size_t total_pair_evaluations = 0;
+
+        for (idx_t node = 0; node < static_cast<idx_t>(graph[l].size());
+             ++node) {
+            const auto& neighbors = graph[l][node];
+            if (neighbors.size() <= 1) {
+                if (!neighbors.empty()) {
+                    l_stats.fully_sorted_nodes++;
+                }
+                continue;
+            }
+
+            // Set up query vector for distance calculations
+            idx_t node_vec_id = getIndex(l, node);
+            storage->reconstruct(node_vec_id, query_vec.data());
+            dis->set_query(query_vec.data());
+
+            size_t node_inversions = 0;
+            float prev_dist = (*dis)(getIndex(l, neighbors[0]));
+
+            for (size_t i = 1; i < neighbors.size(); ++i) {
+                float curr_dist = (*dis)(getIndex(l, neighbors[i]));
+                total_pair_evaluations++;
+
+                // Strict violation check: earlier element is strictly further
+                // away
+                if (prev_dist > curr_dist) {
+                    node_inversions++;
+                }
+                prev_dist = curr_dist;
+            }
+
+            l_stats.total_neighbors_evaluated += neighbors.size();
+            l_stats.total_inversions += node_inversions;
+
+            if (node_inversions == 0) {
+                l_stats.fully_sorted_nodes++;
+            }
+        }
+
+        l_stats.avg_inversions_per_node = l_stats.total_nodes > 0
+                ? static_cast<float>(l_stats.total_inversions) /
+                        l_stats.total_nodes
+                : 0.0f;
+
+        l_stats.inverted_pairs_pct = total_pair_evaluations > 0
+                ? (static_cast<float>(l_stats.total_inversions) /
+                   total_pair_evaluations) *
+                        100.0f
+                : 0.0f;
+
+        l_stats.sorted_nodes_pct = l_stats.total_nodes > 0
+                ? (static_cast<float>(l_stats.fully_sorted_nodes) /
+                   l_stats.total_nodes) *
+                        100.0f
+                : 0.0f;
+
+        stats.push_back(l_stats);
+    }
+
+    return stats;
+}
+
+void HierarchicalGraph::printSortingStats() const {
+    auto stats = getSortingStats();
+
+    std::cout
+            << "\n=====================================================================================\n";
+    std::cout
+            << "                          LAYER ADJACENCY SORTING STATS                              \n";
+    std::cout
+            << "=====================================================================================\n";
+    std::cout << std::right << std::setw(8) << "Layer" << std::setw(12)
+              << "Nodes" << std::setw(16) << "Total Invers." << std::setw(16)
+              << "Avg Inv/Node" << std::setw(18) << "Inverted Pairs %"
+              << std::setw(16) << "Sorted Nodes %"
+              << "\n";
+    std::cout
+            << "-------------------------------------------------------------------------------------\n";
+
+    for (const auto& s : stats) {
+        std::cout << std::right << std::setw(8) << s.layer << std::setw(12)
+                  << s.total_nodes << std::setw(16) << s.total_inversions
+                  << std::setw(16) << std::fixed << std::setprecision(2)
+                  << s.avg_inversions_per_node << std::setw(17) << std::fixed
+                  << std::setprecision(2) << s.inverted_pairs_pct << "%"
+                  << std::setw(15) << std::fixed << std::setprecision(2)
+                  << s.sorted_nodes_pct << "%\n";
+    }
+    std::cout
+            << "=====================================================================================\n\n";
 }
 
 } // namespace faiss

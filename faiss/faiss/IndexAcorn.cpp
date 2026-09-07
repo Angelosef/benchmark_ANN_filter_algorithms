@@ -45,6 +45,8 @@ IndexAcorn::IndexAcorn(
             &(this->storage), M, Mbeta, gamma);
     this->rng.seed(42);
     this->ml = 1 / std::log(this->M);
+    this->two_hop_prune_cutoff =
+            this->Mbeta + 0.2 * (this->M * this->gamma - this->Mbeta);
 }
 
 IndexAcorn::IndexAcorn(
@@ -68,6 +70,8 @@ IndexAcorn::IndexAcorn(
         READ1(this->M);
         READ1(this->Mbeta);
         READ1(this->ml);
+        this->two_hop_prune_cutoff =
+                this->Mbeta + 0.2 * (this->M * this->gamma - this->Mbeta);
 
         this->graph = std::make_unique<HierarchicalGraph>(
                 &this->storage, this->M, this->Mbeta, this->gamma);
@@ -156,7 +160,7 @@ void IndexAcorn::add(idx_t n, const float* x) {
 
 #pragma omp parallel
     {
-        //   Thread-local RNG to avoid contention/data races on this->rng
+        //    Thread-local RNG to avoid contention/data races on this->rng
         std::mt19937 local_rng(42 + omp_get_thread_num());
 
 #pragma omp for schedule(dynamic, 100)
@@ -169,6 +173,7 @@ void IndexAcorn::add(idx_t n, const float* x) {
     }
 
     std::vector<float> avg_edges = this->graph->avg_num_neighbors();
+
     /*
     for (int i = 0; i < avg_edges.size(); i++) {
         std::cout << "layer " << i << " avg edge count = " << avg_edges[i]
@@ -177,6 +182,7 @@ void IndexAcorn::add(idx_t n, const float* x) {
     this->graph->printEdgePercentiles();
     this->graph->printBidirectionalityStats();
     this->graph->printConnectedComponents();
+    this->graph->printSortingStats();
 
     */
 
@@ -184,7 +190,6 @@ void IndexAcorn::add(idx_t n, const float* x) {
 }
 
 void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
-    bool build_phase = true;
     int max_layer = this->graph->getMaxLayerSafe();
 
     int assigned_layer = this->assignLayer(rng);
@@ -195,11 +200,11 @@ void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
     for (int layer = max_layer; layer > assigned_layer; layer -= 1) {
         std::vector<idx_t> results =
                 this->searchLayerSafe(layer, entry_node, vec, 1, 1);
-        entry_node = this->graph->getDownwardsNodeSafe(layer, results[0]);
+        entry_node = this->graph->getDownwardsNode(layer, results[0]);
     }
     for (int layer = this->graph->getMaxLayerSafe(); layer > max_layer;
          layer -= 1) {
-        new_node = this->graph->getDownwardsNodeSafe(layer, new_node);
+        new_node = this->graph->getDownwardsNode(layer, new_node);
     }
 
     for (int layer = std::min(max_layer, assigned_layer); layer > -1;
@@ -208,27 +213,31 @@ void IndexAcorn::addSingle(idx_t index, const float* vec, std::mt19937& rng) {
 
         std::vector<idx_t> results = this->searchLayerSafe(
                 layer, entry_node, vec, active_ef, this->M * this->gamma);
-        entry_node = this->graph->getDownwardsNodeSafe(layer, results[0]);
+        entry_node = this->graph->getDownwardsNode(layer, results[0]);
 
         // add edges
-        if (layer > 0) {
-            this->graph->addInitialEdges(layer, new_node, results);
+        this->graph->addInitialEdges(layer, new_node, results);
+        std::vector<idx_t> new_neighbors =
+                this->graph->getNeighborsSafe(layer, new_node);
+        for (int i = 0; i < new_neighbors.size(); i++) {
+            size_t adj_list_length =
+                    this->graph->getNeighborsSafe(layer, new_neighbors[i])
+                            .size();
 
-            new_node = this->graph->getDownwardsNodeSafe(layer, new_node);
-        } else if (layer == 0) {
-            this->graph->addInitialBottomEdges(new_node, results);
-            std::vector<idx_t> new_neighbors =
-                    this->graph->getNeighborsSafe(layer, new_node);
-            for (int i = 0; i < new_neighbors.size(); i++) {
-                // bool prune_node = sample_bernoulli(rng, this->M);
-                bool prune_node =
-                        this->graph->getNeighborsSafe(layer, new_neighbors[i])
-                                .size() >= this->M * this->gamma;
-                if (prune_node) {
+            if (layer > 0) {
+                bool prune_tail = adj_list_length >= this->M * this->gamma;
+                if (prune_tail) {
+                    this->graph->removeLast(layer, new_neighbors[i]);
+                }
+            } else if (layer == 0) {
+                bool prune_2hop = adj_list_length >= two_hop_prune_cutoff;
+                if (prune_2hop) {
                     this->graph->twoHopPruning(layer, new_neighbors[i]);
                 }
             }
         }
+
+        new_node = this->graph->getDownwardsNode(layer, new_node);
     }
 }
 
@@ -285,14 +294,10 @@ std::vector<idx_t> IndexAcorn::searchLayerSafe(
         }
 
         const std::vector<idx_t> neighbours =
-                this->graph->getNeighborsSafe(layer, frontier_node);
+                this->graph->getNeighborsSafe(layer, frontier_node, this->M);
 
         // Process 1-hop neighbors
-        int neighbour_count = 0;
         for (idx_t node : neighbours) {
-            if (neighbour_count >= this->M) {
-                break;
-            }
             if (visited.count(node) == 0) {
                 visited.insert(node);
                 float dist = (*dis)(this->graph->getIndexSafe(layer, node));
@@ -300,39 +305,6 @@ std::vector<idx_t> IndexAcorn::searchLayerSafe(
                 if (dist < results.max() || results.size() < ef) {
                     results.push(node, dist);
                     frontier.push({dist, node});
-                }
-            }
-            neighbour_count++;
-        }
-
-        // Process 2-hop neighbors for ACORN layer 0
-        if (layer == 0) {
-            for (size_t i = this->Mbeta; i < neighbours.size(); ++i) {
-                if (neighbour_count >= this->M) {
-                    break;
-                }
-                idx_t one_hop_node = neighbours[i];
-
-                // Zero-copy reference to 2-hop neighbors
-                const std::vector<idx_t> two_hop_neighbours =
-                        this->graph->getNeighborsSafe(layer, one_hop_node);
-
-                for (idx_t node : two_hop_neighbours) {
-                    if (neighbour_count >= this->M) {
-                        break;
-                    }
-                    if (visited.count(node) == 0) {
-                        visited.insert(node);
-                        float dist =
-                                (*dis)(this->graph->getIndexSafe(layer, node));
-                        final_results.push(node, dist);
-                        if (dist < results.max() ||
-                            results.size() < results_size) {
-                            results.push(node, dist);
-                            frontier.push({dist, node});
-                        }
-                    }
-                    neighbour_count++;
                 }
             }
         }
