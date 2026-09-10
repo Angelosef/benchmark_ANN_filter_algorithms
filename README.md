@@ -1,5 +1,5 @@
 
-# Benchmarking Filtered Approximate Nearest Neighbor Search (k-ANNS)
+# Benchmarking Filtered Approximate Nearest Neighbor Search (k-FANNS)
 
 ## License
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
@@ -20,7 +20,7 @@ Algorithms are evaluated based on the following four pillars:
 
 ## Installation & Setup
 
-### 1. Environment Configuration
+### Environment Configuration
 Clone the repository and initialize the Python environment using the provided Conda configuration:
 
 ```bash
@@ -30,26 +30,19 @@ conda env create -f environment.yml
 conda activate ann_bench
 ````
 
-### 2\. External Dependencies
-
-This benchmark utilizes specialized C++ implementations. You must follow the build instructions within the respective submodules to compile the source code:
-
-  * **ACORN**: High-performance filtered HNSW. Compiled following the instructions of the faiss library.
-  * **IVF-Squared**: Inverted file structures pointing at vamana-indices. Compiled following the instructions
-  of the ParlayANN library.
-
 -----
 
 ## Repository Structure
 
 | Directory/File | Description |
 | :--- | :--- |
+| `faiss/faiss` | Source code for the implemented algorithms in C++ and Python Bindings |
 | `src/algorithms/` | Python wrappers and interfaces for the benchmarked algorithms. |
 | `src/benchmark/` | Core `BenchmarkRunner` logic and execution scripts for running algorithms and logging results. |
 | `src/datasets/` | Dataset generation, attribute synthesis, and exploratory data analysis. |
 | `src/tests/` | Unit tests for the benchmarking pipeline validation. |
 | `logger.py` | Centralized utility for recording performance metrics. |
-| `plotter.py` | Visualization tools for generating performance charts from log files. |
+| `src/analysers` | Visualization tools for generating performance charts from log files. |
 
 -----
 
@@ -61,7 +54,7 @@ We compare state-of-the-art filtered search techniques against standard baseline
 2.  **Faiss IVF (In-filtering)**: Inverted File Index with filtering applied during list scanning.
 3.  **Faiss HNSW (Post-filtering)**: Hierarchical Navigable Small Worlds with subsequent filter application.
 4.  **ACORN**: An extension of HNSW designed specifically for predicate-based search.
-5.  **IVF-Squared**: An optimized index for ANNS with tag filtering with AND constraints on 1-2 tags.
+5.  **IVF-Squared**: An optimized index for ANNS with tag filtering supporting AND constraints on 1-2 tags.
 
 -----
 
@@ -96,20 +89,20 @@ python -m src.benchmark.[algorithm_name]_bench
 ```
 
 **3. Postprocessing**
-Generate additional data using the raw log - data. Also creates plots to visualize the data in the `/logs` folder.
+Generate additional data using the raw log - data.
 
 ```bash
-python -m src.postprocess
+python -m src.analysers.postprocess
 ```
 
 **4. Visualization**
 Generate performance plots (e.g., Recall vs. Latency curves):
 
 ```bash
-python -m src.tests.plot_test
+python -m src.analysers.[filename]
 ```
 
-*Plots will be exported to the `/benchmark_plots` directory.*
+*Plots will be exported to the `/analysis` directory.*
 
 -----
 
@@ -123,8 +116,13 @@ The recall vs latency plots:
 
 The build time + index memory plots
 
-![Alt Text](sampled_plots/GIST_1.0__resources.png)
+![Alt Text](sampled_plots/GIST_1.0_memory.png)
+![Alt Text](sampled_plots/GIST_1.0_tti_memory.png)
 
+As well as plots showing the parameter trade-off for individual indexes:
+
+![Alt Text](sampled_plots/AcornFlat_GIST_1.0_None_query_correlation.png)
+![Alt Text](sampled_plots/AcornFlat_GIST_1.0_None_query.png)
 
 -----
 

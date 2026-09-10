@@ -2,7 +2,6 @@ name: ann_bench
 channels:
   - defaults
   - conda-forge
-channel_priority: strict
 dependencies:
   - _libgcc_mutex=0.1=main
   - _openmp_mutex=5.1=1_gnu
@@ -23,11 +22,11 @@ dependencies:
   - brotli-python=1.2.0=py312hdb49522_1
   - bzip2=1.0.8=hda65f42_9
   - c-ares=1.34.6=hb03c661_0
-  - ca-certificates=2026.3.19=h06a4308_0
+  - ca-certificates=2026.6.17=hbd8a1cb_0
   - cached-property=1.5.2=hd8ed1ab_1
   - cached_property=1.5.2=pyha770c72_1
   - cairo=1.18.4=h44eff21_0
-  - certifi=2026.2.25=pyhd8ed1ab_0
+  - certifi=2026.6.17=pyhd8ed1ab_0
   - cffi=2.0.0=py312h460c074_1
   - charset-normalizer=3.4.6=pyhd8ed1ab_0
   - contourpy=1.3.3=py312h0a2e395_4
@@ -37,7 +36,6 @@ dependencies:
   - cuda-version=12.9=h9deaac8_3
   - cycler=0.12.1=pyhcf101f3_2
   - cyrus-sasl=2.1.28=hac629b4_1
-  - faiss=1.12.0=py312cuda128h4500ccf_0_cuda
   - fontconfig=2.17.1=h27c8c51_0
   - fonttools=4.62.0=py312h8a5da7c_0
   - freetype=2.14.3=ha770c72_0
@@ -143,11 +141,10 @@ dependencies:
   - openjpeg=2.5.0=hfec8fc6_2
   - openldap=2.6.10=hbde042b_1
   - openmpi=5.0.8=h2fe1745_110
-  - openssl=3.6.1=h35e630c_1
+  - openssl=3.6.3=h35e630c_0
   - packaging=26.0=pyhcf101f3_0
   - pandas=3.0.1=py312h86c3e14_0
   - pcre2=10.46=h1321c63_0
-  - pillow=11.0.0=py312hfdbf927_0
   - pip=26.0.1=pyh8b19718_0
   - pixman=0.46.4=h54a6638_1
   - ply=3.11=pyhd8ed1ab_3
@@ -217,4 +214,7 @@ dependencies:
   - xz-tools=5.8.2=hb03c661_0
   - zlib=1.3.2=h25fd6f3_2
   - zstd=1.5.7=hb78ec9c_6
+  - pip:
+      - faiss==1.14.3
+      - pillow==12.3.0
 prefix: /home/angelos/miniconda3/envs/ann_bench
